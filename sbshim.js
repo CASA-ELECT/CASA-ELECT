@@ -5,7 +5,7 @@
   'use strict';
   const CFG = window.CASA_CFG || {url: 'https://yefptplgdjaqttbdplbl.supabase.co', key: 'sb_publishable_p1PW96wGie5wnB28qc0pQw_jsjX0NP8'};
   const sb = window.supabase.createClient(CFG.url, CFG.key, Object.assign({auth: {persistSession: true, autoRefreshToken: true, detectSessionInUrl: true}}, CFG.opts || {}));
-  window.CASA_SB = sb;
+  window.CASA_SB = sb; window.CASA_SBCFG = CFG;
   const PAGE = 1000;
   const split = p => { const a = String(p).split('/'); return {col: a.slice(0, -1).join('/'), id: a[a.length - 1]}; };
   const clone = o => o == null ? o : JSON.parse(JSON.stringify(o));
@@ -178,7 +178,9 @@
   function addLogout() {
     const go = () => { const av = document.getElementById('av'); if (!av || document.getElementById('lg-out')) return;
       av.parentElement.insertAdjacentHTML('beforeend', `<button type="button" id="lg-out" class="ib" title="Se déconnecter" aria-label="Se déconnecter" style="margin-left:.5rem;white-space:nowrap;font-size:12px;padding:.3rem .55rem;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);cursor:pointer">Déconnexion</button>`);
-      document.getElementById('lg-out').onclick = async () => { await sb.auth.signOut(); location.reload(); }; };
+      document.getElementById('lg-out').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+      document.getElementById('lg-out').insertAdjacentHTML('beforebegin', `<button type="button" id="lg-pw" class="ib" title="Changer mon mot de passe" style="margin-left:.5rem;white-space:nowrap;font-size:12px;padding:.3rem .55rem;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);cursor:pointer">Mot de passe</button>`);
+      document.getElementById('lg-pw').onclick = () => box('newpw'); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
   }
   sb.auth.onAuthStateChange((ev, session) => {

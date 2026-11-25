@@ -2421,7 +2421,7 @@ function vPersonnel() {
   const libres = pActifs().filter(p => !p.uid);
   const rq = reqs.map(k => `<tr class="fi"><td class="font-semibold">${esc(nameOf(k))}<div class="text-xs text-mute">demande le ${fdate((D.requests[k].at || '').slice(0, 10))}</div></td><td><select id="rql-${k}" class="in">${libres.map(p => `<option value="${p.id}">Fiche : ${esc(p.nom)}</option>`).join('')}<option value="new">Créer une nouvelle fiche</option></select></td><td><select id="rqr-${k}" class="in">${RSEL.map(r => `<option value="${r}">${ROLES[r]}</option>`).join('')}</select><div class="text-xs text-mute">utilisé pour une nouvelle fiche</div></td><td><div class="acts">${smb('plink', 'Accepter', 'btn-ok', 'data-id="' + k + '"')}<button type="button" class="ib" data-a="rmreq" data-id="${k}" aria-label="Refuser">${ic('x')}</button></div></td></tr>`).join('');
   const L = D.personnel.filter(p => f === 'tous' || (f === 'Sorti' ? p.statut === 'Sorti' : p.statut !== 'Sorti')).sort((a, b) => a.nom.localeCompare(b.nom));
-  const rows = L.map(p => { const so = p.statut === 'Sorti'; return `<tr class="fi"><td class="font-semibold">${esc(p.nom)}<div class="text-xs text-mute">${esc(p.poste || '')}${p.matricule ? ' · ' + esc(p.matricule) : ''}${p.tel ? ' · ' + esc(p.tel) : ''}</div></td><td>${esc(ROLES[p.role] || '')}</td><td>${p.uid ? bd('Compte lié', 'b-ok') : bd('Sans compte', 'b-mute')}</td><td>${fdate(p.embauche)}${so ? `<div class="text-xs text-mute">sorti le ${fdate(p.sortie)} · ${esc(p.motifSortie || '')}</div>` : ''}</td><td>${so ? bd('Sorti · accès bloqué', 'b-bad') : bd('Actif', 'b-ok')}</td><td><div class="acts">${smb('pedit', 'Modifier', 'btn-o', 'data-id="' + p.id + '"')}${smb('prh', 'Fiche RH', 'btn-o', 'data-id="' + p.id + '"')}${so ? smb('pback', 'Réintégrer', 'btn-o', 'data-id="' + p.id + '"') : smb('pout', 'Départ', 'btn-o', 'data-id="' + p.id + '"')}</div></td></tr>`; }).join('') || emptyRow(6, f === 'Sorti' ? 'Aucun salarié sorti.' : 'Aucun salarié. Ajoutez votre équipe avec « Nouveau salarié ».');
+  const rows = L.map(p => { const so = p.statut === 'Sorti'; return `<tr class="fi"><td class="font-semibold">${esc(p.nom)}<div class="text-xs text-mute">${esc(p.poste || '')}${p.matricule ? ' · ' + esc(p.matricule) : ''}${p.tel ? ' · ' + esc(p.tel) : ''}</div></td><td>${esc(ROLES[p.role] || '')}</td><td>${p.uid ? bd('Compte lié', 'b-ok') : bd('Sans compte', 'b-mute')}</td><td>${fdate(p.embauche)}${so ? `<div class="text-xs text-mute">sorti le ${fdate(p.sortie)} · ${esc(p.motifSortie || '')}</div>` : ''}</td><td>${so ? bd('Sorti · accès bloqué', 'b-bad') : bd('Actif', 'b-ok')}</td><td><div class="acts">${accesOk() && !p.uid && !so ? smb('pacces', 'Créer son accès', 'btn-p', 'data-id="' + p.id + '"') : ''}${smb('pedit', 'Modifier', 'btn-o', 'data-id="' + p.id + '"')}${smb('prh', 'Fiche RH', 'btn-o', 'data-id="' + p.id + '"')}${so ? smb('pback', 'Réintégrer', 'btn-o', 'data-id="' + p.id + '"') : smb('pout', 'Départ', 'btn-o', 'data-id="' + p.id + '"')}</div></td></tr>`; }).join('') || emptyRow(6, f === 'Sorti' ? 'Aucun salarié sorti.' : 'Aucun salarié. Ajoutez votre équipe avec « Nouveau salarié ».');
   const lg = legacy.map(k => `<tr class="fi"><td class="font-semibold">${esc(nameOf(k))}</td><td>${esc(ROLES[D.staff[k].role] || '')}</td><td>${smb('plegacy', 'Créer sa fiche', 'btn-p', 'data-id="' + k + '"')}</td></tr>`).join('');
   const sel = `<select class="in" style="width:auto" data-a="filt" data-f="pst">${[['Actif', 'Actifs'], ['Sorti', 'Sortis'], ['tous', 'Tous']].map(([v, l]) => `<option value="${v}"${f === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   return head('Personnel', 'Vous créez les fiches. Un salarié avec un compte le relie à sa fiche ; un départ bloque l\'accès et garde tout son historique.', sel + btn('pnew', 'Nouveau salarié')) +
@@ -4085,6 +4085,41 @@ document.addEventListener('click', e => {
       toast('Restauration terminée : ' + k + ' fiche(s)' + (ko ? ', ' + ko + ' refusée(s)' : ''), !!ko); BKFILE = null;
     });
   }
+});
+
+/* ---------- Version en ligne : l'administrateur crée lui-même l'accès d'un salarié (e-mail + mot de passe) ---------- */
+const accesOk = () => !!(window.CASA_SB && window.CASA_SBCFG && ctx.admin);
+function pwGen() { const a = 'abcdefghjkmnpqrstuvwxyz', A = 'ABCDEFGHJKLMNPQRSTUVWXYZ', d = '23456789'; const r = s => s[Math.floor(Math.random() * s.length)]; return r(A) + r(a) + r(a) + r(a) + r(a) + r(d) + r(d) + r(d) + r(a) + r(A); }
+function accesModal(p) {
+  showModal('Créer l\'accès de ' + p.nom, `<div class="grid gap-3"><p class="hint" style="margin-top:0">Le salarié pourra se connecter au site avec cet e-mail et ce mot de passe. S'il n'a pas d'e-mail, inventez un identifiant du type <b>prenom@casa-elect.tn</b> : aucun message n'est envoyé.</p>
+    <div><label class="lb" for="ac-e">E-mail (identifiant de connexion)</label><input id="ac-e" class="in" type="email" value="${esc(p.email || '')}" placeholder="ex. sami@casa-elect.tn" autocomplete="off"></div>
+    <div><label class="lb" for="ac-p">Mot de passe provisoire</label><div style="display:flex;gap:.35rem"><input id="ac-p" class="in" value="${pwGen()}" autocomplete="off" style="flex:1;min-width:0"><button type="button" class="btn btn-o btn-sm" data-a="acgen">Autre</button></div></div>
+    <div><label class="lb" for="ac-r">Profil dans l'application</label><select id="ac-r" class="in">${RSEL.map(r => `<option value="${r}"${r === (p.role || 'technicien') ? ' selected' : ''}>${ROLES[r]}</option>`).join('')}</select></div>
+    <div class="flex justify-end gap-2"><button type="button" class="btn btn-o" data-a="close">Annuler</button><button type="button" class="btn btn-p" data-a="acok" data-id="${p.id}">Créer l'accès</button></div></div>`);
+}
+async function accesCreate(p) {
+  const email = (($('#ac-e') || {}).value || '').trim().toLowerCase(), pw = (($('#ac-p') || {}).value || '').trim(), role = ($('#ac-r') || {}).value || 'technicien';
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('E-mail invalide (exemple : sami@casa-elect.tn).', true);
+  if (pw.length < 8) return toast('Mot de passe : 8 caractères minimum.', true);
+  const C = window.CASA_SBCFG, tmp = window.supabase.createClient(C.url, C.key, {auth: {persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'casa-creation'}});
+  const {data, error} = await tmp.auth.signUp({email, password: pw, options: {data: {nom: p.nom}}});
+  if (error) return toast(/registered|already/i.test(error.message) ? 'Cet e-mail a déjà un compte.' : /rate|limit/i.test(error.message) ? 'Trop de créations en peu de temps : réessayez dans une heure.' : error.message, true);
+  if (!data.user || !data.session) return toast('Compte créé mais en attente de confirmation par e-mail : désactivez « Confirm email » dans Supabase (Authentication → Sign In / Providers → Email), puis validez ce compte dans « Demandes d\'accès ».', true);
+  const uid = data.user.id; try { await tmp.auth.signOut(); } catch (x) {}
+  await ctx.db.doc('staff/' + uid).set({role, pid: p.id});
+  await ctx.db.doc('personnel/' + p.id).update({uid, email, role});
+  try { await ctx.db.doc('requests/' + uid).delete(); } catch (x) {}
+  showModal('Accès créé', `<div class="grid gap-3"><p style="margin:0">Donnez ces informations à <b>${esc(p.nom)}</b> :</p>
+    <div class="card p-3" id="ac-txt" style="font-family:ui-monospace,monospace;font-size:14px;line-height:1.7">Site : ${esc(location.origin + location.pathname)}<br>E-mail : ${esc(email)}<br>Mot de passe : ${esc(pw)}</div>
+    <p class="hint" style="margin:0">Conseillez-lui de changer son mot de passe à la première connexion (bouton « Mot de passe » en haut de l'écran).</p>
+    <div class="flex justify-end gap-2"><button type="button" class="btn btn-o" data-a="accopy">Copier</button><button type="button" class="btn btn-p" data-a="close">Terminé</button></div></div>`);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a;
+  if (a === 'pacces') { const p = byId(D.personnel, b.dataset.id); if (p) accesModal(p); }
+  else if (a === 'acgen') { const i = $('#ac-p'); if (i) i.value = pwGen(); }
+  else if (a === 'acok') { const p = byId(D.personnel, b.dataset.id); if (p && needOn()) { b.disabled = true; wr(() => accesCreate(p)).then(() => { b.disabled = false; }); } }
+  else if (a === 'accopy') { const t = ($('#ac-txt') || {}).innerText || ''; navigator.clipboard.writeText(t).then(() => toast('Copié'), () => toast('Sélectionnez le texte et copiez-le.', true)); }
 });
 
 /* ---------- Modules, rendu, navigation ---------- */
