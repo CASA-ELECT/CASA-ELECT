@@ -102,7 +102,8 @@ end $$;
 -- 6. Noms des collègues (pour le planning, les pointages…), sans exposer les autres informations
 create or replace function public.noms(p_ids uuid[]) returns table (user_id uuid, nom text)
 language sql stable security definer set search_path = public as $$
-  select p.user_id, p.nom from public.profils p where public.est_actif() and p.user_id = any (p_ids)
+  select p.user_id, coalesce(p.nom, p.email) from public.profils p
+  where p.user_id = any (p_ids) and (public.est_admin() or (public.est_actif() and p.actif))  -- l'administrateur voit aussi les comptes en attente
 $$;
 
 revoke execute on function public.doc_maj(text, text, jsonb), public.prendre_verrou(text, text, integer), public.noms(uuid[]) from anon;
