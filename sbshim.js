@@ -177,7 +177,7 @@
   }
   function addLogout() {
     const go = () => { const av = document.getElementById('av'); if (!av || document.getElementById('lg-out')) return;
-      av.insertAdjacentHTML('afterend', `<button type="button" id="lg-out" class="ib" title="Se déconnecter" aria-label="Se déconnecter" style="margin-left:.25rem;font-size:12px;padding:.3rem .55rem;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);cursor:pointer">Déconnexion</button>`);
+      av.parentElement.insertAdjacentHTML('beforeend', `<button type="button" id="lg-out" class="ib" title="Se déconnecter" aria-label="Se déconnecter" style="margin-left:.5rem;white-space:nowrap;font-size:12px;padding:.3rem .55rem;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);cursor:pointer">Déconnexion</button>`);
       document.getElementById('lg-out').onclick = async () => { await sb.auth.signOut(); location.reload(); }; };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
   }
