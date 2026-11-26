@@ -1967,7 +1967,7 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-a="b
 const lkey = l => l.aid || ('t:' + normS(l.desig || ''));
 const blActive = () => D.livraisons.filter(b => b.statut !== 'Annulé');
 async function createBL(client, lignes, extra = {}) {
-  lignes = frz(lignes);
+  lignes = frz(lignes); if (extra.regId) { lignes = lignes.map(l => ({...l})); regApply(lignes, extra.regId); }
   const dup = await already('livraisons', extra.opId); if (dup) return dup;
   return withLock(async () => {
     const a = await alloc('bl', ['BL'], 'BL', 'livraisons');
@@ -2030,8 +2030,13 @@ async function saveBLCC(L, client) {
 const BLSEL = new Set();
 function mergeLines(bls) {
   const m = new Map();
-  bls.forEach(b => b.lignes.forEach(l => { const k = lkey(l) + '|' + l.pu + '|' + (+l.rem || 0) + '|' + l.tva; const e = m.get(k), q = +l.qte || 0, pr = l.pr != null ? +l.pr : null; if (e) { if (pr != null && e.pr != null && e.qte + q > 0) e.pr = Math.round((e.pr * e.qte + pr * q) / (e.qte + q) * 1000) / 1000; e.qte = r3(e.qte + q); } else m.set(k, {aid: l.aid || null, desig: l.desig, qte: q, pu: +l.pu, tva: +l.tva, ...(+l.rem > 0 ? {rem: +l.rem} : {}), ...(pr != null ? {pr} : {})}); }));
-  return [...m.values()].filter(l => l.qte > 0);
+  bls.forEach(b => b.lignes.forEach(l => {
+    const q = +l.qte || 0, pr = l.pr != null ? +l.pr : null, k = l.aid ? lkey(l) + '|' + (+l.rem || 0) + '|' + l.tva : lkey(l) + '|' + l.pu + '|' + (+l.rem || 0) + '|' + l.tva, e = m.get(k);
+    if (e) { const t = e.qte + q; if (t > 0) { if (pr != null && e.pr != null) e.pr = Math.round((e.pr * e.qte + pr * q) / t * 1000) / 1000; e._ht += q * (+l.pu); } e.qte = r3(t); }
+    else m.set(k, {aid: l.aid || null, desig: l.desig, qte: q, pu: +l.pu, tva: +l.tva, _ht: q * (+l.pu), ...(+l.rem > 0 ? {rem: +l.rem} : {}), ...(pr != null ? {pr} : {})});
+  }));
+  /* même article livré à des prix de vente différents : prix moyen pondéré (le total reste celui des livraisons) */
+  return [...m.values()].filter(l => l.qte > 0).map(({_ht, ...l}) => (l.aid && l.qte > 0 ? {...l, pu: Math.round(_ht / l.qte * 1000) / 1000} : l));
 }
 async function invoiceBLs(type) {
   if (BUSY || !needOn()) return;
@@ -4122,6 +4127,29 @@ document.addEventListener('click', e => {
   else if (a === 'accopy') { const t = ($('#ac-txt') || {}).innerText || ''; navigator.clipboard.writeText(t).then(() => toast('Copié'), () => toast('Sélectionnez le texte et copiez-le.', true)); }
 });
 
+/* ---------- Regroupement : la remise d'un article s'applique aux livraisons / tickets suivants du même regroupement ---------- */
+function regDocs(regId) {
+  if (!regId) return [];
+  return [...D.livraisons.filter(b => b.regId === regId && b.statut !== 'Annulé'), ...D.tickets.filter(t => t.regId === regId && t.statut !== 'Annulé')]
+    .sort((a, b) => ((a.date || '') + (a.at || '')).localeCompare((b.date || '') + (b.at || '')));
+}
+/* dernière remise (en %) accordée sur cet article dans le regroupement, 0 s'il n'y en a pas */
+function regRem(regId, aid) {
+  if (!regId || !aid) return 0; let r = 0;
+  regDocs(regId).forEach(d => (d.lignes || []).forEach(l => { if (l.aid === aid && +l.rem > 0) r = +l.rem; }));
+  return r;
+}
+/* applique la remise du regroupement aux lignes qui n'en ont pas encore ; renvoie le nombre de lignes modifiées */
+function regApply(lignes, regId) {
+  let n = 0; (lignes || []).forEach(l => { if (l.aid && !l.arr && !(+l.rem > 0)) { const r = regRem(regId, l.aid); if (r > 0) { l.rem = r; n++; } } });
+  return n;
+}
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'cart-reg' && CART.reg) { const n = regApply(CART.lignes, CART.reg); if (n) { try { saveLocal(); } catch (x) {} render(); toast('Remise du regroupement appliquée à ' + n + ' article(s)'); } }
+  if (t.id === 'ed-reg' && ED) setTimeout(() => { if (ED && ED.regId) { const n = regApply(ED.lignes, ED.regId); if (n) { drawEditor(); toast('Remise du regroupement appliquée à ' + n + ' article(s)'); } } }, 0);
+});
+
 /* ---------- Modules, rendu, navigation ---------- */
 const ALL = ['admin', 'commercial', 'comptoir', 'technicien', 'rh'];
 const MODULES = [
@@ -4235,7 +4263,7 @@ document.addEventListener('click', e => {
     case 'offtoggle': setOff(!OFF); closeMenu(); break;
     case 'sync': if (OFF) setOff(false); else sync(); break;
     case 'viewdoc': { const x = docOf(d.k, id); if (x) showDoc(x); break; }
-    case 'addart': { const x = byId(D.articles, id); if (!x) break; const l = CART.lignes.find(q => q.aid === id); if (l) l.qte = r3(l.qte + 1); else CART.lignes.push({id: uid(), aid: id, desig: x.nom, pu: x.prixHT, tva: x.tva, qte: 1}); saveLocal(); render(); break; }
+    case 'addart': { const x = byId(D.articles, id); if (!x) break; const l = CART.lignes.find(q => q.aid === id); if (l) l.qte = r3(l.qte + 1); else { const rr = regRem(CART.reg, id); CART.lignes.push({id: uid(), aid: id, desig: x.nom, pu: x.prixHT, tva: x.tva, qte: 1, ...(rr > 0 ? {rem: rr} : {})}); if (rr > 0) toast('Remise de ' + String(rr).replace('.', ',') + ' % du regroupement appliquée'); } saveLocal(); render(); break; }
     case 'qty': { const l = byId(CART.lignes, id); if (l) { l.qte = Math.max(1, r3(l.qte + +d.d)); saveLocal(); render(); } break; }
     case 'rmline': CART.lignes = CART.lignes.filter(x => x.id !== id); saveLocal(); render(); break;
     case 'cartclear': clearCart(); render(); break;
@@ -4262,7 +4290,7 @@ document.addEventListener('click', e => {
     case 'tcancel': { if (!needOn()) break; const x = byId(D.tickets, id); if (x) openCancelTicket(x); break; }
     case 'tcancelok': doCancelTicket(); break;
     case 'qdrop': if (!arm(b, 'Retirer ?')) return; Q = Q.filter(i => i.opId !== id); saveLocal(); render(); break;
-    case 'edart': { const a = byId(D.articles, id || ($('#ed-art') || {}).value); if (a) { const nl = {id: uid(), aid: a.id, desig: a.nom, qte: 1, pu: a.prixHT, pu0: a.prixHT, rem: 0, tva: a.tva, ttc: ttcU({pu: a.prixHT, tva: a.tva})}; if (ED.lignes.length === 1 && !ED.lignes[0].desig && !(+ED.lignes[0].pu)) ED.lignes[0] = nl; else ED.lignes.push(nl); drawEditor(); toast('Ajouté : ' + a.nom); } else toast('Article introuvable, réessayez.', true); break; }
+    case 'edart': { const a = byId(D.articles, id || ($('#ed-art') || {}).value); if (a) { const rr = ED.regId ? regRem(ED.regId, a.id) : 0, nl = {id: uid(), aid: a.id, desig: a.nom, qte: 1, pu: a.prixHT, pu0: a.prixHT, rem: rr, tva: a.tva, ttc: ttcU({pu: a.prixHT, tva: a.tva})}; if (rr > 0) setTimeout(() => toast('Remise de ' + String(rr).replace('.', ',') + ' % du regroupement appliquée'), 50); if (ED.lignes.length === 1 && !ED.lignes[0].desig && !(+ED.lignes[0].pu)) ED.lignes[0] = nl; else ED.lignes.push(nl); drawEditor(); toast('Ajouté : ' + a.nom); } else toast('Article introuvable, réessayez.', true); break; }
     case 'gotickets': FILT.mois = d.m; go('tickets'); break;
     case 'newFT': if (needOn()) openEditor('FT'); break;
     case 'newDV': openEditor('DV'); break;
