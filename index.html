@@ -4640,7 +4640,7 @@ function rdvOcc(r, d1, d2) {
 function agItems(d1, d2) {
   const R = myRoles(), A = ctx.admin, has = (...r) => A || r.some(x => R.includes(x)), I = [], inR = d => d && d >= d1 && d <= d2;
   const push = (kind, date, o) => { if (inR(date)) I.push({kind, date, heure: o.heure || '', titre: o.titre || '', sous: o.sous || '', go: o.go || '', id: o.id || '', duree: o.duree || 0, rep: o.rep || ''}); };
-  (D.rdv || []).forEach(r => { if (A || r.owner === ctx.uid || (r.invites || []).includes(ctx.uid)) rdvOcc(r, d1, d2).forEach(dt => push('rdv', dt, {heure: r.heure, titre: r.titre, sous: [r.client, r.lieu].filter(Boolean).join(' · '), id: r.id, duree: +r.duree || 0, rep: r.rep})); });
+  (D.rdv || []).forEach(r => { if (A || r.owner === ctx.uid || (r.invites || []).includes(ctx.uid)) rdvOcc(r, d1, d2).forEach(dt => push('rdv', dt, {heure: r.heure, titre: r.titre, sous: [r.owner && r.owner !== ctx.uid ? 'de ' + agWho(r.owner) : (r.invites || []).length ? 'avec ' + r.invites.map(agWho).join(', ') : '', r.client, r.lieu].filter(Boolean).join(' · '), id: r.id, duree: +r.duree || 0, rep: r.rep})); });
   (D.interventions || []).forEach(i => { if (i.statut === 'Annulée') return; const mine = (i.techIds || []).includes(ctx.uid); if (A || mine || has('commercial')) push('interv', i.date, {heure: i.heure, titre: i.titre, sous: [i.client, i.lieu].filter(Boolean).join(' · '), go: myRole() === 'technicien' ? 'tplanning' : 'interv', duree: (+i.duree || 0) * 60}); });
   (D.taches || []).forEach(t => { if (t.statut === 'Terminée' || t.statut === 'Faite') return; if (A || (t.assigne && normS(t.assigne) === meName())) push('tache', t.echeance, {titre: t.titre, sous: t.priorite === 'Haute' ? 'Priorité haute' : '', go: 'taches'}); });
   if (has('commercial')) {
@@ -4675,13 +4675,24 @@ function vAgenda() {
   return head('Mon agenda', sub, btn('rdvnew', 'Nouveau rendez-vous') + btn('agprefs', 'Notifications', 'btn-o', '', 'cog')) + nav + leg + body;
 }
 function agToday() { const L = agItems(ds(), ds()); if (!L.length && !(D.rdv || []).length) return ''; return `<section class="card mt-3"><div class="bh"><h2>Aujourd'hui dans mon agenda</h2><button type="button" class="lk" data-a="go" data-go="agenda">Ouvrir l'agenda</button></div><div class="p-3">${L.slice(0, 8).map(agChip).join('') || '<p class="hint" style="margin:0">Rien de prévu aujourd\'hui.</p>'}${L.length > 8 ? `<div class="text-sm lk" data-a="go" data-go="agenda">+ ${L.length - 8} autre(s)</div>` : ''}</div></section>`; }
-const colleagues = () => (D.personnel || []).filter(p => p.uid && p.uid !== ctx.uid && p.statut !== 'Sorti').map(p => [p.uid, p.nom]);
+/* Personnes à inviter : le(s) administrateur(s) en premier, puis les collègues ayant un compte */
+const colleagues = () => { const P = (D.personnel || []).filter(p => p.uid && p.uid !== ctx.uid && p.statut !== 'Sorti').map(p => [p.uid, p.nom]), A = ((D.settings && D.settings.agAdmins) || []).filter(a => a.uid && a.uid !== ctx.uid).map(a => [a.uid, ((P.find(x => x[0] === a.uid) || [])[1] || a.nom || 'Gérant') + ' (gérant)']); return [...A, ...P.filter(x => !A.some(a => a[0] === x[0]))]; };
+const agWho = u => { const a = ((D.settings && D.settings.agAdmins) || []).find(x => x.uid === u); return ((D.personnel || []).find(p => p.uid === u) || {}).nom || (a && a.nom) || (typeof nameOf === 'function' ? nameOf(u) : 'un collègue'); };
+/* L'administrateur publie son identifiant (nom + compte) pour que les employés puissent l'inviter */
+let AGADM = false;
+function agAdminPub() {
+  if (AGADM || !ctx.admin || (typeof OFF !== 'undefined' && OFF) || !D.settings || !ctx.ready || !ctx.uid) return;
+  const L = D.settings.agAdmins || [], nom = ((D.personnel || []).find(p => p.uid === ctx.uid) || {}).nom || (ctx.me && ctx.me.name) || 'Gérant'; AGADM = true;
+  if (L.some(x => x.uid === ctx.uid && x.nom === nom)) return;
+  ctx.db.doc('settings/company').update({agAdmins: [...L.filter(x => x.uid !== ctx.uid), {uid: ctx.uid, nom}]}).catch(() => { AGADM = false; });
+}
+setInterval(() => { try { agAdminPub(); } catch (e) {} }, 8000);
 const rapPre = x => rapCodesRaw(x).filter(c => RAP_PRE.some(p => p[0] === c)), rapAutre = x => rapCodesRaw(x).find(c => !RAP_PRE.some(p => p[0] === c)) || '';
 const rapCodesRaw = x => x && Array.isArray(x.rappels) && x.rappels.length ? x.rappels : x && x.rappel != null && x.rappel !== '' ? [+x.rappel ? (+x.rappel % 1440 === 0 ? +x.rappel / 1440 + 'j' : +x.rappel % 60 === 0 ? +x.rappel / 60 + 'h' : +x.rappel + 'm') : '0'] : ['def'];
 PF.rdv = {n: (item, x) => x && x._occ ? 'Modifier le rendez-vous du ' + fdate(x._occ) + ' seulement' : item ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous', f: [{k: 'titre', l: 'Objet', req: 1, w: 1, d: x => (x && x.titre) || ''}, {k: 'date', l: 'Date' , t: 'date', req: 1, d: x => (x && x.date) || FILT.agd || ds()}, {k: 'heure', l: 'Heure', t: 'time', d: x => (x && x.heure) || '09:00'}, {k: 'duree', l: 'Durée (minutes)', t: 'number', d: x => (x && x.duree) || 60}, {k: 'client', l: 'Client', d: x => (x && x.client) || ''}, {k: 'lieu', l: 'Lieu', d: x => (x && x.lieu) || ''},
   {k: 'rep', l: 'Répéter', t: 'select', o: [['', 'Ne se répète pas'], ['jour', 'Chaque jour'], ['semaine', 'Chaque semaine'], ['mois', 'Chaque mois (même date)'], ['an', 'Chaque année (même date)']], d: x => (x && x.rep) || ''}, {k: 'repFin', l: 'Répéter jusqu\'au (vide = sans fin)', t: 'date', d: x => (x && x.repFin) || ''},
   {k: 'rappels', l: 'Rappels (plusieurs choix possibles)', t: 'multi', o: () => RAP_PRE, d: x => rapPre(x)}, {k: 'rapN', l: 'Autre rappel : combien ? (vide = aucun)', t: 'number', d: x => { const m = /^(\d+)/.exec(rapAutre(x)); return m ? +m[1] : ''; }}, {k: 'rapU', l: 'Unité de l\'autre rappel', t: 'select', o: [['j', 'jour(s) avant'], ['s', 'semaine(s) avant'], ['M', 'mois avant'], ['a', 'an(s) avant'], ['h', 'heure(s) avant'], ['m', 'minute(s) avant']], d: x => { const m = /[mhjsMa]$/.exec(rapAutre(x)); return m ? m[0] : 'j'; }},
-  {k: 'invites', l: 'Inviter des collègues', t: 'multi', o: colleagues, d: x => (x && x.invites) || []}, {k: 'note', l: 'Note', t: 'area', w: 1, d: x => (x && x.note) || ''}],
+  {k: 'invites', l: 'Inviter (le gérant ou des collègues) : ils voient le rendez-vous et reçoivent les mêmes rappels', t: 'multi', o: colleagues, d: x => (x && x.invites) || []}, {k: 'note', l: 'Note', t: 'area', w: 1, d: x => (x && x.note) || ''}],
   save: async (v, id, x) => {
     if (!v.titre || !v.date) { toast('Objet et date obligatoires.', true); return false; }
     const {rapN, rapU, ...o0} = v, R = (v.rappels || []).slice(); if (+rapN > 0) R.push(Math.round(+rapN) + (rapU || 'j'));
@@ -4719,7 +4730,7 @@ setInterval(() => { try { agTick(); } catch (e) {} }, 60000);
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a;
   if (a === 'rdvnew') openPF('rdv', null, null);
-  else if (a === 'rdvedit') { const r = byId(D.rdv, b.dataset.id); if (r) { if (r.owner !== ctx.uid && !ctx.admin) return toast('Rendez-vous de ' + ((typeof tname === 'function' && tname(r.owner)) || 'un collègue') + ' : ' + r.titre + ' à ' + (r.heure || '') + (r.lieu ? ', ' + r.lieu : ''));
+  else if (a === 'rdvedit') { const r = byId(D.rdv, b.dataset.id); if (r) { if (r.owner !== ctx.uid && !ctx.admin) return toast('Rendez-vous de ' + agWho(r.owner) + ' : ' + r.titre + ' à ' + (r.heure || '') + (r.lieu ? ', ' + r.lieu : ''));
     const o = b.dataset.occ || r.date;
     if (RDVREP[r.rep]) return showModal('Rendez-vous répété', `<p class="text-sm" style="margin:0"><b>${esc(r.titre)}</b>${r.heure ? ' à ' + esc(r.heure) : ''} · ${esc(rdvRepLbl(r))}</p><p class="hint">Que voulez-vous faire pour le ${fdate(o)} ?</p><div class="flex flex-wrap gap-2 mt-3"><button type="button" class="btn btn-p" data-a="rdvocc" data-id="${r.id}" data-occ="${o}">Modifier ce jour seulement</button><button type="button" class="btn btn-o" data-a="rdvserie" data-id="${r.id}">Modifier toute la série</button><button type="button" class="btn btn-o" data-a="rdvoccdel" data-id="${r.id}" data-occ="${o}">Supprimer ce jour seulement</button><button type="button" class="btn btn-o" data-a="rdvdel" data-id="${r.id}">Supprimer toute la série</button></div>`);
     rdvOpen(r); } }
