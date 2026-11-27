@@ -27,3 +27,12 @@ ventes comptoir, devis, factures, stock, achats, caisse, planning, personnel.
 ## Sauvegarde
 
 Menu **Administration → Sauvegarde** : télécharger chaque semaine le fichier `.json` et le garder sur le PC ou une clé USB.
+
+
+## Autonomie, sauvegardes et réinstallation
+- `docs/KIT-AUTONOMIE.md` : ce qu'il faut garder et comment protéger vos accès.
+- `docs/REINSTALLATION.md` : réinstaller l'application sur un nouveau compte Supabase, pas à pas.
+- `docs/RESTAURATION.md` : restaurer une sauvegarde.
+- `outils/sauvegarde-en-ligne/` : copie chiffrée chaque nuit dans un dépôt GitHub privé.
+- `outils/sauvegarde-pc/` : copie quotidienne sur le PC du magasin et hebdomadaire sur le disque externe.
+- `sql/` : scripts de la base, à lancer dans l'ordre 01, 02, 03, 04.

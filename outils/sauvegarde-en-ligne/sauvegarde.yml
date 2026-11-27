@@ -1,0 +1,38 @@
+# CASA-ELECT · copie de la base chaque nuit, chiffrée, dans un dépôt GitHub PRIVÉ.
+# À placer dans le dépôt privé, dans le dossier .github/workflows/ (voir LISEZMOI.md).
+name: Sauvegarde nocturne
+on:
+  schedule:
+    - cron: '17 1 * * *'   # chaque nuit vers 2 h 17 (heure de Tunis)
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  sauvegarde:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Copie de la base
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: node sauvegarde.mjs > sauvegarde.json
+      - name: Chiffrement (mot de passe BACKUP_PASSPHRASE)
+        env:
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          mkdir -p copies
+          gzip -9 sauvegarde.json
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in sauvegarde.json.gz -out "copies/casa-$(date +%F).json.gz.enc" -pass env:PASS
+          rm sauvegarde.json.gz
+          # on garde 60 copies
+          ls -1t copies/*.enc | tail -n +61 | xargs -r rm --
+      - name: Enregistrer
+        run: |
+          git config user.name "Sauvegarde CASA-ELECT"
+          git config user.email "sauvegarde@casa-elect.tn"
+          git add copies
+          git commit -m "Sauvegarde du $(date +%F)" || echo "rien de nouveau"
+          git push
