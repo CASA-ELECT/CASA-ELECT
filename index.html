@@ -538,6 +538,7 @@ function docHtml(d) {
   h += `<div class="ph"><div class="phl">${logoBlock(S)}<div class="ci">${coordLines(S).concat(['FC', 'FT'].includes(ty) ? [[S.banque && 'Banque : ' + S.banque, S.rib && 'RIB : ' + S.rib].filter(Boolean).join(' · ')].filter(Boolean) : []).map(esc).join('<br>')}</div></div>
     <div class="ti"><div class="doc">${title}</div><div class="no">N° ${esc(d.numero)}</div><div class="dt">Date : ${fdate(d.date)}</div>${d.provisoire && !d.isProv ? `<div class="dt">Réf. provisoire : ${esc(d.provisoire)}</div>` : ''}${d.factureNumero && ty === 'AV' ? `<div class="dt">${d.partiel ? 'Sur la facture' : 'Annule la facture'} ${esc(d.factureNumero)}</div>` : d.ticketNumero && ty === 'AV' ? `<div class="dt">Sur le ticket ${esc(d.ticketNumero)}</div>` : ''}${ty === 'DV' ? `<div class="dt">Valable ${esc(d.validite || S.validite)} jours</div>` : ''}${box1 ? box1.replace('class="box"', 'class="box cl"') : ''}</div></div>`;
   const refs = [];
+  if (regName(d)) refs.push('<b>Regroupement :</b> ' + esc(regName(d)));
   if (d.dossier) refs.push('<b>Dossier :</b> ' + esc(d.dossier) + (dos && dos.lieu ? '<br>' + esc(dos.lieu) : ''));
   if (d.mois) refs.push('<b>Facture globale</b> des tickets de caisse de ' + esc(monthLabel(d.mois)) + ' (' + (d.ticketIds || []).length + ' tickets)');
   if (ty === 'RC') refs.push('<b>Mode de paiement :</b> ' + esc(d.mode));
@@ -563,7 +564,9 @@ function docHtml(d) {
       <div class="bas"><div class="lft"><div class="note" style="margin-top:0">Marchandise retournée pour : ${esc((d.motif || '').toLowerCase())}. Merci de nous adresser ${d.demande === 'Échange' ? 'les articles de remplacement' : d.demande === 'Réparation' ? 'les articles réparés' : 'l\'avoir correspondant'} en rappelant le n° ${esc(d.numero)}.</div></div><div class="tt"><div><span>Total HT</span><span>${fmt(t.ht)}</span></div><div><span>Total TVA</span><span>${fmt(t.tva)}</span></div><div class="big"><span>Total TTC</span><span>${fmt(t.ttc)}</span></div></div></div>
       <div class="sign"><div>Remis par ${esc(S.raison)} (date et signature)</div><div>Reçu par le fournisseur (nom, date, cachet)</div></div>`;
   } else if (ty === 'BL') {
-    h += `<table><thead><tr><th>Code</th><th>Désignation</th><th class="r">Quantité livrée</th></tr></thead><tbody>${L.map(l => `<tr><td>${esc(refOf(l))}</td><td>${esc(l.desig)}</td><td class="r">${l.qte}</td></tr>`).join('')}</tbody></table><div class="sign"><div>Livré par${d.chauffeur || d.vehicule ? `<span style="display:block;color:#0f172a;font-size:12px;margin-top:4px">${d.chauffeur ? 'Chauffeur : ' + esc(d.chauffeur) : ''}${d.chauffeur && d.vehicule ? '<br>' : ''}${d.vehicule ? 'Véhicule : ' + esc(d.vehicule) : ''}</span>` : ''}</div><div>Reçu en bon état par le client (nom, date, signature)</div></div>`;
+    const LB = L.filter(l => !l.arr && !(+l.pu < 0)), LG = LB.filter(l => !l.mo);
+    if (d._ecran) h += blEcran(LB);
+    else h += `<table><thead><tr><th>Code</th><th>Désignation</th><th class="r">Quantité livrée</th></tr></thead><tbody>${LG.map(l => `<tr><td>${esc(refOf(l))}</td><td>${esc(l.desig)}</td><td class="r">${l.qte}</td></tr>`).join('')}</tbody></table><div class="sign"><div>Livré par${d.chauffeur || d.vehicule ? `<span style="display:block;color:#0f172a;font-size:12px;margin-top:4px">${d.chauffeur ? 'Chauffeur : ' + esc(d.chauffeur) : ''}${d.chauffeur && d.vehicule ? '<br>' : ''}${d.vehicule ? 'Véhicule : ' + esc(d.vehicule) : ''}</span>` : ''}</div><div>Reçu en bon état par le client (nom, date, signature)</div></div>`;
   } else if ((ty === 'FC' && !d._complet) || ty === 'TC') {
     h += `<table><thead><tr><th>Code</th><th>Désignation</th><th class="r">Qté</th><th class="r">PU TTC</th><th class="r">Total TTC</th></tr></thead><tbody>${L.filter(l => !l.arr).map(l => ({...l, rem: 0})).map(l => `<tr><td>${esc(refOf(l))}</td><td>${esc(l.desig)}</td><td class="r">${l.qte}</td><td class="r">${fmt(ttcU(l))}</td><td class="r">${fmt(r3(l.qte * l.pu * (1 - (+l.rem || 0) / 100) * (1 + l.tva / 100)))}</td></tr>`).join('')}</tbody></table>
       ${ty === 'FC' ? `<div class="bas"><div class="lft">${lettresHtml(ty, t.net)}${cachetHtml(ty)}</div>` : ''}<div class="tt">${(() => { const br = r3(L.filter(l => !l.arr).reduce((s, l) => s + r3(l.qte * l.pu * (1 + l.tva / 100)), 0)), rm = r3(br - t.ttc); return (rm > 0.0005 ? `<div><span>Total remises</span><span>-${fmt(rm)}</span></div>` : '') + (ty === 'FC' && t.timbre ? `<div><span>Timbre fiscal</span><span>${fmt(t.timbre)}</span></div>` : '') + `<div class="big"><span>Total TTC</span><span>${fmt(ty === 'TC' ? t.ttc : t.net)}</span></div>`; })()}${payLines(d, t)}</div>${ty === 'FC' ? '</div>' : ''}`;
@@ -573,7 +576,7 @@ function docHtml(d) {
       <div class="tt">${RT.ht > 0 ? `<div><span>Total HT brut</span><span>${fmt(r3(t.ht + RT.ht))}</span></div><div><span>Total remises HT</span><span>-${fmt(RT.ht)}</span></div>` : ''}<div><span>Total HT</span><span>${fmt(t.ht)}</span></div><div><span>Total TVA</span><span>${fmt(t.tva)}</span></div>${t.timbre ? `<div><span>Timbre fiscal</span><span>${fmt(t.timbre)}</span></div>` : ''}<div class="big"><span>Total TTC</span><span>${fmt(ty === 'DV' || ty === 'BC' || ty === 'CC' || (ty === 'AV' && d.partiel) ? t.ttc : t.net)}</span></div>${payLines(d, t)}</div></div>`;
   }
   if (ty === 'TC') { /* aucune mention interne sur le ticket */ }
-  else if (ty !== 'RC' && ty !== 'RF') h += (['FC', 'FT'].includes(ty) ? modHtml(d) : '') + `<div class="note">${esc(S.cond)}${S.mentions ? '\n' + esc(S.mentions) : ''}</div>`;
+  else if (ty !== 'RC' && ty !== 'RF' && ty !== 'BL') h += (['FC', 'FT'].includes(ty) ? modHtml(d) : '') + `<div class="note">${esc(S.cond)}${S.mentions ? '\n' + esc(S.mentions) : ''}</div>`;
   if (ty === 'DV') h += `<div class="sign"><div>Bon pour accord, date et signature du client</div><div>Cachet et signature de ${esc(S.raison)}</div></div>`;
   h += '</div>'; /* plus de bas de page : banque et RIB figurent en haut à gauche des factures */
   return h;
@@ -590,7 +593,7 @@ function payLines(d, t) {
   return `${av > 0 ? `<div><span>Avoir(s) ${esc((d.avoirsPartiels || []).join(', '))}</span><span>− ${fmt(av)}</span></div>` : ''}${pay - av > 0.0005 ? `<div><span>Déjà réglé</span><span>${fmt(r3(pay - av))}</span></div>` : ''}<div class="big"><span>${re > 0.0005 ? 'Reste à payer' : 'Soldé'}</span><span>${fmt(Math.max(0, re))}</span></div>`;
 }
 function payInterne(d) { PAYIN = true; const t = d.totals || {}, h = payLines(d, t); PAYIN = false; return h ? `<div class="card" style="padding:.75rem;margin-top:.75rem"><div class="text-sm font-semibold">Paiements (interne, non imprimé)</div><div class="paper" style="padding:0;background:transparent"><div class="tt" style="max-width:340px">${h}</div></div></div>` : ''; }
-function showDoc(d, complet) { if (d.type === 'FC') d = {...d, _complet: complet != null ? complet : cfg().fcFormat === 'complet'}; SHOWN = d; showModal(d.numero, docHtml(d) + payInterne(d) + echInterne(d) + `<div class="flex justify-end gap-2 mt-3 flex-wrap items-center">${d.type === 'FC' ? `<label class="text-sm" for="fc-fmt" style="margin-right:auto">Présentation <select id="fc-fmt" class="in" style="width:auto;display:inline-block" data-a="fcfmt"><option value="ttc"${!d._complet ? ' selected' : ''}>Simplifiée (TTC)</option><option value="complet"${d._complet ? ' selected' : ''}>Complète (HT, TVA, timbre)</option></select></label>` : ''}${ctx.dl ? `<button type="button" class="btn btn-p" data-a="pdf">${ic('down')}Imprimer (PDF)</button><button type="button" class="btn btn-o" data-a="dl">${ic('down')}HTML</button>` : ''}<button type="button" class="btn btn-p" data-a="close">Fermer</button></div>`, true); }
+function showDoc(d, complet) { if (d.type === 'BL') d = {...d, _ecran: true}; if (d.type === 'FC') d = {...d, _complet: complet != null ? complet : d.format ? d.format === 'complet' : cfg().fcFormat === 'complet'}; SHOWN = d; showModal(d.numero, docHtml(d) + payInterne(d) + echInterne(d) + `<div class="flex justify-end gap-2 mt-3 flex-wrap items-center">${d.type === 'FC' ? `<label class="text-sm" for="fc-fmt" style="margin-right:auto">Présentation <select id="fc-fmt" class="in" style="width:auto;display:inline-block" data-a="fcfmt"><option value="ttc"${!d._complet ? ' selected' : ''}>Simplifiée (TTC)</option><option value="complet"${d._complet ? ' selected' : ''}>Complète (HT, TVA, timbre)</option></select></label>` : ''}${ctx.dl ? `<button type="button" class="btn btn-p" data-a="pdf">${ic('down')}Imprimer (PDF)</button><button type="button" class="btn btn-o" data-a="dl">${ic('down')}HTML</button>` : ''}<button type="button" class="btn btn-p" data-a="close">Fermer</button></div>`, true); }
 async function downloadDoc(d) {
   if (!ctx.dl) return toast('Téléchargement indisponible dans cette vue.', true);
   const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>' + esc(d.numero) + '</title><style>@page{size:A4;margin:0}body{margin:0;background:#fff}.a4{width:794px;margin:0 auto}' + PAPER_CSS + '</style></head><body><div class="a4">' + docPrint(d) + '</div></body></html>';
@@ -630,7 +633,6 @@ function vDash() {
     const rqs = Object.keys(D.requests).length;
     h += `<section class="card"><div class="bh"><h2>Conflits de stock à vérifier</h2>${rqs ? bd(rqs + ' demande(s) d\'accès', 'b-warn') : ''}</div><ul class="blist">${sorted(D.conflicts.map(c => ({...c, at: c.date}))).map(c => `<li class="row"><div class="min-w-0"><div class="font-semibold truncate">${esc(c.article)}</div><div class="text-xs text-mute">Vente ${esc(c.numero)} : ${c.demande} demandé(s), ${c.dispo} en stock (${fdate(c.date)})</div></div>${smb('ackconf', 'Vérifié', 'btn-ok', 'data-id="' + c.id + '"')}</li>`).join('') || '<li class="text-center text-mute text-sm py-6">Aucun conflit de stock.</li>'}</ul></section>`;
   }
-  h += `<section class="card"><div class="bh"><h2>Prochaines étapes de la construction</h2></div><ul class="blist">${['Technico-commercial : prospection, commandes, planning, tâches, recouvrement', 'Technicien : planning de demain, fiche d\'intervention, problèmes, besoins en matériel', 'RH : recrutement, congés, avances, fiches de paie, formation'].map(x => `<li class="row"><span>${x}</span>${bd('À venir', 'b-mute')}</li>`).join('')}</ul></section>`;
   return h;
 }
 
@@ -653,7 +655,7 @@ function vVente() {
         <div class="kv text-xl font-bold"><span>Total TTC à encaisser</span><span id="cart-ttc">${fmt(t.ttc)}</span></div>${none ? '' : `<div class="flex justify-end" style="margin-top:.2rem"><button type="button" class="btn btn-o btn-sm" data-a="cart-arr">Arrondir le total</button></div>${arrBox('cart', t.ttc, 'Montant payé par le client (TTC)')}`}<div class="rendu-box"><div><label class="lb" for="cart-recu">Montant reçu du client en espèces (DT)</label><input id="cart-recu" class="in" type="number" min="0" step="any" inputmode="decimal" style="max-width:12rem;font-size:1.15rem;font-weight:600" placeholder="ex. 50" value="${esc(CART.recu || '')}"></div><div id="cart-rendu" class="rendu-out" aria-live="polite"></div></div><div id="cart-mg">${margeHtml(margeOf(CART.lignes))}</div>
         <div class="flex flex-wrap items-end gap-2 pt-2"><div><label class="lb" for="cart-paye">Encaissé maintenant (DT) — laisser vide si payé en totalité</label><input id="cart-paye" class="in" type="number" min="0" step="any" style="max-width:12rem" placeholder="${fmt(t.ttc).replace(' DT', '')}" value="${esc(CART.paye || '')}"></div><div><label class="lb" for="cart-mode">Mode</label><select id="cart-mode" class="in">${['Espèces', 'Chèque', 'Virement', 'Carte', CREDIT].map(x => `<option${(CART.mode || 'Espèces') === x ? ' selected' : ''}>${x}</option>`).join('')}</select></div></div>
         <div class="flex flex-wrap items-end gap-2 pt-2"><div><label class="lb" for="cart-paye2">2e mode de paiement : montant (facultatif)</label><input id="cart-paye2" class="in" type="number" min="0" step="any" style="max-width:12rem" placeholder="0" value="${esc(CART.paye2 || '')}"></div><div><label class="lb" for="cart-mode2">2e mode</label><select id="cart-mode2" class="in">${['Espèces', 'Chèque', 'Virement', 'Carte', CREDIT].map(x => `<option${(CART.mode2 || 'Espèces') === x ? ' selected' : ''}>${x}</option>`).join('')}</select></div><div id="cart-reste" class="text-sm font-semibold"></div></div>${(CART.client || '').trim() && creditSolde(CART.client) > 0.0005 ? `<div class="text-sm flex flex-wrap items-center gap-2" style="padding-top:.4rem"><span>Crédit disponible de ${esc(CART.client)} : <b>${fmt(creditSolde(CART.client))}</b></span>${none ? '' : (CART.mode === CREDIT || CART.mode2 === CREDIT) ? `${bd('Crédit utilisé : ' + fmt(Math.min(creditSolde(CART.client), t.ttc)), 'b-ok')}<button type="button" class="btn btn-o btn-sm" data-a="nocredit">Ne pas utiliser</button>` : `<button type="button" class="btn btn-ok btn-sm" data-a="usecredit">Utiliser le crédit</button>`}</div>` : ''}
-        <div class="flex flex-wrap gap-2 pt-2">${btn('preview', 'Aperçu', 'btn-o', none ? 'disabled' : '', 'eye')}${btn('devisCart', 'Enregistrer un devis', 'btn-o', none ? 'disabled' : '', '')}${btn('cash', label, 'btn-g', none || BUSY ? 'disabled' : '', 'check')}${btn('cashFC', 'Facture nominative FC (+ timbre ' + fmt(tf.timbre) + ')', 'btn-o', none || BUSY || OFF ? 'disabled' : '', '')}</div>
+        <div class="flex flex-wrap gap-2 pt-2">${btn('preview', 'Aperçu', 'btn-o', none ? 'disabled' : '', 'eye')}${btn('devisCart', 'Enregistrer un devis', 'btn-o', none ? 'disabled' : '', '')}${btn('cash', label, 'btn-g', none || BUSY ? 'disabled' : '', 'check')}${btn('cashFC', 'Facture FC simplifiée', 'btn-o', (none || BUSY || OFF ? 'disabled ' : '') + 'data-f="ttc" title="Facture nominative, prix TTC, timbre ' + fmt(tf.timbre) + '"', '')}${btn('cashFC', 'Facture FC complète', 'btn-o', (none || BUSY || OFF ? 'disabled ' : '') + 'data-f="complet" title="Facture nominative avec HT, TVA et timbre ' + fmt(tf.timbre) + '"', '')}</div>
       </div>
     </section>
     <section class="card xl:col-span-2 order-1 xl:order-2"><div class="bh"><h2>Catalogue</h2><span class="text-xs text-mute">Cliquez pour ajouter</span></div><div class="p-3 pb-0"><input id="cat-q" class="in" type="search" autocomplete="off" placeholder="Rechercher par code ou désignation…" aria-label="Rechercher un article" value="${esc(CATQ)}"></div><div class="cat-grid">${cat || '<p class="text-mute text-sm">Aucun article. Ajoutez-en dans Articles &amp; stock.</p>'}</div></section>
@@ -661,12 +663,12 @@ function vVente() {
 }
 function cartDoc(extra = {}) { const S = cfg(); return {type: 'TC', numero: 'APERÇU', date: ds(), client: {nom: CART.client}, lignes: CART.lignes, totals: calc(CART.lignes, 'TC', S), ...extra}; }
 function clearCart() { CART = {lignes: [], client: ''}; saveLocal(); }
-async function cash(asFC) {
+async function cash(asFC, fcFmt) {
   if (!CART.lignes.length || BUSY) return;
   const L = CART.lignes.map(l => ({...l})), client = {nom: CART.client}, due = asFC ? calc(L, 'FC').net : calc(L, 'TC').ttc, pv = String(CART.paye || '').trim() === '' ? due : Math.min(due, Math.max(0, parseFloat(String(CART.paye).replace(',', '.')) || 0)), mode = CART.mode || 'Espèces';
   let p2 = Math.min(due, Math.max(0, parseFloat(String(CART.paye2 || '').replace(',', '.')) || 0)), mode2 = CART.mode2 || 'Espèces', pv1 = p2 > 0 ? (String(CART.paye || '').trim() === '' ? r3(Math.max(0, due - p2)) : Math.min(pv, r3(Math.max(0, due - p2)))) : pv;
   if (OFF) {
-    const prov = enqueue('vente', {client, lignes: L, paye: pv, mode}); const d = cartDoc({numero: prov, isProv: true}); clearCart(); render(); showDoc(d); return;
+    const prov = enqueue('vente', {client, lignes: L, paye: pv, mode}); const d = cartDoc({numero: prov, isProv: true}); clearCart(); render(); doneDoc(d); return;
   }
   /* crédit choisi pour tout le montant mais insuffisant (ex. facture FC = ticket + timbre) : crédit plafonné, le reste en espèces */
   if (mode === CREDIT && !(p2 > 0) && (client.nom || '').trim() && pv1 > creditSolde(client.nom) + 0.0005 && creditSolde(client.nom) > 0.0005) { const so = creditSolde(client.nom); p2 = r3(pv1 - so); pv1 = so; mode2 = mode2 === CREDIT ? 'Espèces' : mode2; toast('Crédit utilisé : ' + fmt(so) + ' ; reste ' + fmt(p2) + ' en ' + mode2); }
@@ -675,9 +677,9 @@ async function cash(asFC) {
   const short = L.filter(l => { const a = l.aid && D.articles.find(x => x.id === l.aid); return false; }).map(l => l.desig);
   BUSY = true; render();
   try {
-    const r = asFC ? await createFacture('FC', client, L, {source: 'comptoir', suivi: true, opId: uid() + uid()}) : await createTicket(client, L, {source: 'comptoir', suivi: true, opId: uid() + uid(), ...(CART.reg ? {regId: CART.reg} : {})});
+    const r = asFC ? await createFacture('FC', client, L, {source: 'comptoir', suivi: true, format: fcFmt === 'complet' ? 'complet' : 'ttc', opId: uid() + uid()}) : await createTicket(client, L, {source: 'comptoir', suivi: true, opId: uid() + uid(), ...(CART.reg ? {regId: CART.reg} : {})});
     try { if (pv1 > 0) await addPay(asFC ? 'fact' : 'tic', {id: r.id, numero: r.numero, client}, pv1, mode, ds()); if (p2 > 0) await addPay(asFC ? 'fact' : 'tic', {id: r.id, numero: r.numero, client}, p2, mode2, ds()); } catch (e) { toast('Pièce créée, mais le paiement n\'a pas été enregistré : ajoutez-le dans Recouvrement.', true); }
-    clearCart(); BUSY = false; render(); showDoc({...r.doc, id: r.id}); toast((asFC ? 'Facture ' : 'Ticket ') + r.numero + ' créé' + (short.length ? ' ⚠ stock insuffisant pour : ' + short.join(', ') + ' (conflit signalé, à régulariser)' : ''), !!short.length);
+    clearCart(); BUSY = false; render(); doneDoc({...r.doc, id: r.id}); toast((asFC ? 'Facture ' : 'Ticket ') + r.numero + ' créé' + (short.length ? ' ⚠ stock insuffisant pour : ' + short.join(', ') + ' (conflit signalé, à régulariser)' : ''), !!short.length);
   } catch (e) { BUSY = false; render(); toast(e.message || 'Enregistrement impossible', true); }
 }
 
@@ -797,7 +799,7 @@ async function submitForm(f) {
     if (type === 'libre') { if (!(v.qte > 0)) return toast('Indiquez une quantité.', true); CART.lignes.push({id: uid(), aid: null, desig: v.desig, pu: v.pu, tva: v.tva, qte: v.qte}); saveLocal(); }
     else if (type === 'recu') {
       if (!(v.montant > 0)) return toast('Indiquez le montant encaissé.', true);
-      if (OFF) { const prov = enqueue('recu', v); toast('Reçu enregistré hors ligne : ' + prov); } else { const r = await createRecu({...v, opId: uid() + uid()}); ensureClient({nom: v.client}); closeModal(); render(); showDoc({...r.doc, id: r.id}); return; }
+      if (OFF) { const prov = enqueue('recu', v); toast('Reçu enregistré hors ligne : ' + prov); } else { const r = await createRecu({...v, opId: uid() + uid()}); ensureClient({nom: v.client}); closeModal(); render(); doneDoc({...r.doc, id: r.id}); return; }
     } else if (type === 'article') {
       if (!needOn()) return;
       delete v.mg; const pv0 = v.prixHT; v.prixHT = pvArrondi(v.prixHT, v.tva); if (v.prixHT !== r3(pv0)) toast('Prix arrondi : ' + fmt(pvTTC(v.prixHT, v.tva)) + ' TTC (' + fmt(v.prixHT) + ' HT)');
@@ -867,18 +869,18 @@ function edMargeOld(t) {
 function edTot() { if (ED.kind !== 'TC') ED.lignes.forEach((l, i) => { const el = $('#lm-' + i); if (el) el.innerHTML = lineMg(l); }); const t = calc(edLines(), ED.kind === 'FT' ? 'FT' : ED.kind === 'TC' ? 'TC' : 'DV'); if (ED.kind === 'TC') { $('#edtot').innerHTML = `<div class="flex justify-between kv text-lg font-bold"><span>Total TTC</span><span>${fmt(t.ttc)}</span></div>`; return; } $('#edtot').innerHTML = `<div class="flex justify-between"><span class="text-mute">Total HT</span><span class="tnum">${fmt(t.ht)}</span></div>${t.by.map(b => `<div class="flex justify-between"><span class="text-mute">TVA ${b.rate} % sur ${fmt(b.base)}</span><span class="tnum">${fmt(b.tva)}</span></div>`).join('')}<div class="flex justify-between"><span class="text-mute">Total TTC</span><span class="tnum">${fmt(t.ttc)}</span></div>${t.timbre ? `<div class="flex justify-between"><span class="text-mute">Timbre fiscal</span><span class="tnum">${fmt(t.timbre)}</span></div>` : ''}<div class="flex justify-between kv text-lg font-bold"><span>${ED.kind === 'FT' ? 'Net à payer' : 'Total TTC'}</span><span>${fmt(ED.kind === 'FT' ? t.net : t.ttc)}</span></div>${edMarge(t)}`; }
 function drawEditor() {
   const to = tvaOpts().filter(x => x[0] > 0 || true), c = ED.client;
-  const rows = ED.lignes.map((l, i) => `<div class="lr${ED.kind === 'TC' ? '' : ' lr6'}"><input class="in" data-ed="desig" data-i="${i}" value="${esc(l.desig)}" placeholder="Désignation" aria-label="Désignation"><input class="in" type="number" min="0" step="any" data-ed="qte" data-i="${i}" value="${l.qte}" aria-label="Quantité"><input class="in" type="number" min="0" step="any" data-ed="${ED.kind === 'TC' ? 'ttc' : 'pu'}" data-i="${i}" value="${ED.kind === 'TC' ? l.ttc : l.pu}" aria-label="${ED.kind === 'TC' ? 'Prix TTC' : 'Prix HT'}">${ED.kind === 'TC' ? '' : `<input class="in" type="number" min="0" max="100" step="any" data-ed="rem" data-i="${i}" value="${l.rem || 0}" aria-label="Remise en pourcentage">`}<select class="in" data-ed="tva" data-i="${i}" aria-label="TVA">${to.map(([v, lab]) => `<option value="${v}"${+v === +l.tva ? ' selected' : ''}>${lab}</option>`).join('')}</select><button type="button" class="ib" data-a="edrm" data-i="${i}" aria-label="Retirer la ligne">${ic('trash')}</button></div>${ED.kind === 'TC' ? '' : `<div class="text-xs" id="lm-${i}" style="margin:-.15rem 0 .45rem .25rem"></div>`}`).join('');
+  const rows = ED.lignes.map((l, i) => `<div class="lr${ED.kind === 'TC' ? '' : ' lr6'}"><input class="in" data-ed="desig" data-i="${i}" value="${esc(l.desig)}" placeholder="${l.mo ? 'Main-d\'œuvre / déplacement (non livré)' : 'Désignation'}" aria-label="Désignation"><input class="in" type="number" min="0" step="any" data-ed="qte" data-i="${i}" value="${l.qte}" aria-label="Quantité"><input class="in" type="number" min="0" step="any" data-ed="${ED.kind === 'TC' ? 'ttc' : 'pu'}" data-i="${i}" value="${ED.kind === 'TC' ? l.ttc : l.pu}" aria-label="${ED.kind === 'TC' ? 'Prix TTC' : 'Prix HT'}">${ED.kind === 'TC' ? '' : `<input class="in" type="number" min="0" max="100" step="any" data-ed="rem" data-i="${i}" value="${l.rem || 0}" aria-label="Remise en pourcentage">`}<select class="in" data-ed="tva" data-i="${i}" aria-label="TVA">${to.map(([v, lab]) => `<option value="${v}"${+v === +l.tva ? ' selected' : ''}>${lab}</option>`).join('')}</select><button type="button" class="ib" data-a="edrm" data-i="${i}" aria-label="Retirer la ligne">${ic('trash')}</button></div>${ED.kind === 'TC' ? '' : `<div class="text-xs" id="lm-${i}" style="margin:-.15rem 0 .45rem .25rem"></div>`}`).join('');
   showModal(ED.kind === 'TC' ? 'Modifier le ticket ' + ED.edit.numero : ED.kind === 'FT' ? 'Nouvelle facture travaux (FT)' : ED.kind === 'BL' ? (ED.edit ? 'Modifier / retour : ' + ED.edit.numero : 'Nouveau bon de livraison') : ED.kind === 'CC' ? 'Nouvelle commande client' : 'Nouveau devis', `${ED.hint ? `<div class="banner" style="margin-bottom:.75rem">${esc(ED.hint)}</div>` : ''}
     <div class="cols2" style="margin-bottom:.75rem"><div><label class="lb" for="ed-nom" style="display:flex;justify-content:space-between;align-items:center">Client <button type="button" class="btn btn-o btn-sm" data-a="cladded" title="Ajouter ce client à la liste">+ Ajouter à la liste</button></label><input id="ed-nom" class="in" data-edc="nom" list="dl-clients" autocomplete="off" value="${esc(c.nom)}"><datalist id="dl-clients">${D.clients.map(x => `<option value="${esc(x.nom)}">`).join('')}</datalist></div><div${ED.kind === 'TC' ? ' hidden' : ''}><label class="lb" for="ed-mf">Matricule fiscal du client</label><input id="ed-mf" class="in" data-edc="mf" value="${esc(c.mf)}"></div><div${ED.kind === 'TC' ? ' hidden' : ''} style="grid-column:1/-1"><label class="lb" for="ed-adr">Adresse</label><input id="ed-adr" class="in" data-edc="adresse" value="${esc(c.adresse)}"></div><div${ED.kind === 'TC' ? ' hidden' : ''} style="grid-column:1/-1"><label class="lb" for="ed-dos">Dossier / chantier (facultatif)</label><select id="ed-dos" class="in" data-edd="1">${dosOpts(ED.dossier)}</select></div>${ED.kind === 'TC' ? '' : actSel()}${ED.kind === 'BL' ? blXFields() : ''}${ED.kind === 'FT' ? modFields() : ''}</div>
     ${true ? `<div style="margin-bottom:.6rem"><label class="lb" for="ed-q">Ajouter un article du stock (code ou désignation)</label><input id="ed-q" class="in" type="search" autocomplete="off" placeholder="Tapez un code ou un nom…"><div id="ed-res" style="max-height:11rem;overflow:auto;margin-top:.3rem"></div></div>` : ''}${ED.lignes.length ? `<div class="lr${ED.kind === 'TC' ? '' : ' lr6'} hint" style="margin-bottom:.2rem"><span>Désignation</span><span>Qté</span><span>${ED.kind === 'TC' ? 'PU TTC (DT)' : 'PU HT (DT)'}</span>${ED.kind === 'TC' ? '' : '<span>Rem. %</span>'}<span>TVA</span><span></span></div>` : ''}${rows}
-    <button type="button" class="btn btn-o btn-sm" data-a="edadd">${ic('plus')}${ED.kind === 'TC' ? 'Ajouter une ligne' : 'Ajouter une ligne libre (main-d\'œuvre, déplacement…)'}</button>${ED.kind === 'TC' ? `<div style="margin-top:.6rem"><label class="lb" for="ed-motif">Motif de la modification (obligatoire)</label><input id="ed-motif" class="in" data-edm="1" value="${esc(ED.motif || '')}" placeholder="Ex. erreur de quantité"></div>` : ''}${ED.kind === 'BL' && ED.edit ? `<div style="margin-top:.6rem"><label class="lb" for="ed-motif">Motif (retour, erreur…) obligatoire</label><input id="ed-motif" class="in" data-edm="1" value="${esc(ED.motif || '')}" placeholder="Ex. retour de 2 disjoncteurs"></div>` : ''}
+    <button type="button" class="btn btn-o btn-sm" data-a="edadd">${ic('plus')}${ED.kind === 'TC' ? 'Ajouter une ligne' : ED.kind === 'BL' ? 'Ligne libre (marchandise)' : 'Ajouter une ligne libre (main-d\'œuvre, déplacement…)'}</button>${ED.kind === 'BL' ? ` <button type="button" class="btn btn-o btn-sm" data-a="edaddmo">${ic('plus')}Main-d'œuvre / déplacement</button>` : ''}${ED.kind !== 'TC' && typeof svcPickBtn === 'function' ? svcPickBtn() : ''}${ED.kind === 'TC' ? `<div style="margin-top:.6rem"><label class="lb" for="ed-motif">Motif de la modification (obligatoire)</label><input id="ed-motif" class="in" data-edm="1" value="${esc(ED.motif || '')}" placeholder="Ex. erreur de quantité"></div>` : ''}${ED.kind === 'BL' && ED.edit ? `<div style="margin-top:.6rem"><label class="lb" for="ed-motif">Motif (retour, erreur…) obligatoire</label><input id="ed-motif" class="in" data-edm="1" value="${esc(ED.motif || '')}" placeholder="Ex. retour de 2 disjoncteurs"></div>` : ''}
     ${ED.kind === 'TC' || !ED.lignes.length ? '' : `<div class="flex justify-end" style="margin-top:.6rem"><button type="button" class="btn btn-o btn-sm" data-a="ed-arr">Arrondir le total</button></div>${arrBox('ed', 0, ED.kind === 'FT' ? 'Net à payer souhaité (timbre compris)' : 'Total TTC souhaité')}`}<div id="edtot" class="tot" style="margin-top:1rem;border:1px solid var(--line);border-radius:.7rem"></div>
     <div class="flex justify-end gap-2 pt-3"><button type="button" class="btn btn-o" data-a="close">Annuler</button><button type="button" class="btn btn-p" data-a="edsave">${ED.kind === 'TC' ? 'Enregistrer la modification' : ED.kind === 'FT' ? 'Créer la facture' : ED.kind === 'BL' ? (ED.edit ? 'Enregistrer la modification' : 'Créer le BL (stock −)') : ED.kind === 'CC' ? 'Enregistrer la commande' : 'Enregistrer le devis'}</button></div>`, true);
   edTot();
 }
 async function edSave() {
   if (BUSY) return;
-  const L = edLines().filter(l => l.desig.trim() && l.qte > 0 && (l.pu >= 0 || l.arr)).map(l => ({aid: l.aid, desig: l.desig.trim(), qte: +l.qte, pu: +l.pu, tva: +l.tva, ...(+l.rem > 0 ? {rem: Math.min(100, +l.rem)} : {}), ...(l.arr ? {arr: true} : {})})), client = {...ED.client};
+  const L = edLines().filter(l => l.desig.trim() && l.qte > 0 && (l.pu >= 0 || l.arr)).map(l => ({aid: l.aid, desig: l.desig.trim(), qte: +l.qte, pu: +l.pu, tva: +l.tva, ...(+l.rem > 0 ? {rem: Math.min(100, +l.rem)} : {}), ...(l.arr ? {arr: true} : {}), ...(l.mo ? {mo: true} : {}), ...(l.sid ? {sid: l.sid} : {})})), client = {...ED.client};
   if (ED.kind !== 'TC' && !client.nom.trim()) return toast('Indiquez le client.', true);
   if (!L.length) return toast('Ajoutez au moins une ligne complète.', true);
   try {
@@ -894,9 +896,9 @@ async function edSave() {
       const r = await createFacture('FT', client, L, {source: ED.from && ED.from.recuId ? 'recu' : 'travaux', dossier: ED.dossier || '', activite: edAct(), opId: uid() + uid(), ...(ED.from && ED.from.recuId ? {recuId: ED.from.recuId} : {}), ...(ED.from && ED.from.devisId ? {devisId: ED.from.devisId} : {}), ...modOf(ED.mod || {}, calc(L, 'FT').net, ds())});
       if (ED.from && ED.from.recuId) await ctx.db.doc('recus/' + ED.from.recuId).update({statut: 'Facturé', factureNumero: r.numero});
       if (ED.from && ED.from.devisId) await ctx.db.doc('devis/' + ED.from.devisId).update({statut: 'Facturé', factureNumero: r.numero});
-      ensureClient(client); BUSY = false; closeModal(); showDoc({...r.doc, id: r.id}); toast('Facture ' + r.numero + ' créée');
+      ensureClient(client); BUSY = false; closeModal(); doneDoc({...r.doc, id: r.id}); toast('Facture ' + r.numero + ' créée');
     } else if (OFF) { const prov = enqueue('devis', {client, lignes: L, dossier: ED.dossier || '', activite: edAct()}); BUSY = false; closeModal(); render(); toast('Devis enregistré hors ligne : ' + prov); }
-    else { const r = await createDevis(client, L, {opId: uid() + uid(), dossier: ED.dossier || '', activite: edAct()}); ensureClient(client); BUSY = false; closeModal(); showDoc({...r.doc, id: r.id}); toast('Devis ' + r.numero + ' créé'); }
+    else { const r = await createDevis(client, L, {opId: uid() + uid(), dossier: ED.dossier || '', activite: edAct()}); ensureClient(client); BUSY = false; closeModal(); doneDoc({...r.doc, id: r.id}); toast('Devis ' + r.numero + ' créé'); }
   } catch (e) { BUSY = false; toast(e.message || 'Enregistrement impossible', true); }
 }
 document.addEventListener('click', e => {
@@ -928,7 +930,7 @@ function vTickets() {
   if (can('admin', 'commercial')) { if (FILT.tkv === 'jour') return vJourVentes(); if (FILT.tkv === 'annee') return vAnVentes(); }
   const m = FILT.mois, bs = billedSet(), every = sorted(D.tickets).filter(t => t.date.slice(0, 7) === m), all = every.filter(t => t.statut !== 'Annulé'), todo = all.filter(t => !isBilled(t, bs));
   const sum = a => r3(a.reduce((s, t) => s + tkNet(t), 0)), boss = can('admin', 'commercial');
-  const rows = every.map(t => { const open = t.statut === 'À facturer' && !bs.has(t.id); return `<tr class="fi"><td class="font-semibold">${esc(t.numero)}${t.provisoire ? `<div class="text-xs text-mute">${esc(t.provisoire)}</div>` : ''}</td><td>${fdate(t.date)}</td><td>${esc(cname(t))}</td><td class="num font-semibold">${fmt(t.totals.ttc)}</td><td>${t.statut === 'Annulé' ? bd('Annulé') + `<div class="text-xs text-mute">${esc(t.motif || '')}</div>` : isBilled(t, bs) ? bd('Facturé') + (t.factureNumero ? `<div class="text-xs text-mute">${esc(t.factureNumero)}</div>` : '') : bd('À facturer', 'b-warn')}${(t.modifs || []).length ? ' ' + bd('Modifié', 'b-info') : ''}${+t.avoirTTC > 0 ? `<div>${bd('Avoir ' + fmt(t.avoirTTC), 'b-info')}<div class="text-xs text-mute">${esc((t.avoirsPartiels || []).join(', '))}</div></div>` : ''}${payBadge(t, 'tic') ? '<div>' + payBadge(t, 'tic') + '</div>' : ''}</td><td><div class="acts">${smb('viewdoc', 'Voir', 'btn-o', 'data-k="tic" data-id="' + t.id + '"', 'eye')}${boss && t.statut !== 'Annulé' && !isBilled(t, bs) && tkNet(t) > 0.0005 ? smb('avtk', 'Avoir', 'btn-o', 'data-id="' + t.id + '"') : ''}${t.suivi && t.statut !== 'Annulé' && !t.regFacture && r3(t.totals.ttc - paidOf(t, 'tic')) > 0.0005 ? smb('recpay', 'Encaisser le reste', 'btn-ok', 'data-id="' + t.id + '"', 'euro') : ''}${open ? `<button type="button" class="ib" data-a="tedit" data-id="${t.id}" title="Modifier" aria-label="Modifier le ticket">${ic('edit')}</button><button type="button" class="ib" data-a="tcancel" data-id="${t.id}" title="Annuler" aria-label="Annuler le ticket">${ic('x')}</button>` : ''}</div></td></tr>`; }).join('') || emptyRow(6, 'Aucun ticket ce mois-ci.');
+  const rows = every.map(t => { const open = t.statut === 'À facturer' && !bs.has(t.id); return `<tr class="fi"><td class="font-semibold">${esc(t.numero)}${t.provisoire ? `<div class="text-xs text-mute">${esc(t.provisoire)}</div>` : ''}</td><td>${fdate(t.date)}</td><td>${esc(cname(t))}${regName(t) ? `<div class="text-xs text-mute">${esc(regName(t))}</div>` : ''}</td><td class="num font-semibold">${fmt(t.totals.ttc)}</td><td>${t.statut === 'Annulé' ? bd('Annulé') + `<div class="text-xs text-mute">${esc(t.motif || '')}</div>` : isBilled(t, bs) ? bd('Facturé') + (t.factureNumero ? `<div class="text-xs text-mute">${esc(t.factureNumero)}</div>` : '') : bd('À facturer', 'b-warn')}${(t.modifs || []).length ? ' ' + bd('Modifié', 'b-info') : ''}${+t.avoirTTC > 0 && avOuvert(t) ? `<div>${bd('Avoir ' + fmt(t.avoirTTC), 'b-info')}<div class="text-xs text-mute">${esc((t.avoirsPartiels || []).join(', '))}</div></div>` : ''}${payBadge(t, 'tic') ? '<div>' + payBadge(t, 'tic') + '</div>' : ''}</td><td><div class="acts">${smb('viewdoc', 'Voir', 'btn-o', 'data-k="tic" data-id="' + t.id + '"', 'eye')}${boss && t.statut !== 'Annulé' && !isBilled(t, bs) && tkNet(t) > 0.0005 ? smb('avtk', 'Avoir', 'btn-o', 'data-id="' + t.id + '"') : ''}${t.suivi && t.statut !== 'Annulé' && !t.regFacture && r3(t.totals.ttc - paidOf(t, 'tic')) > 0.0005 ? smb('recpay', 'Encaisser le reste', 'btn-ok', 'data-id="' + t.id + '"', 'euro') : ''}${open ? `<button type="button" class="ib" data-a="tedit" data-id="${t.id}" title="Modifier" aria-label="Modifier le ticket">${ic('edit')}</button><button type="button" class="ib" data-a="tcancel" data-id="${t.id}" title="Annuler" aria-label="Annuler le ticket">${ic('x')}</button>` : ''}</div></td></tr>`; }).join('') || emptyRow(6, 'Aucun ticket ce mois-ci.');
   const sel = `<input type="month" class="in" style="width:auto" data-a="filt" data-f="mois" value="${esc(m)}" aria-label="Mois">`;
   return head('Tickets & facture globale', 'Les clients de passage reçoivent un ticket de caisse. En fin de mois, une facture FC regroupe les tickets.', (boss ? jModeSel('mois') : '') + sel + (boss ? jExp('mois', m + '-01', m + '-31') : '') + (boss ? btn('newglobal', 'Créer la facture globale', 'btn-p', todo.length ? '' : 'disabled', 'doc') : '')) +
     `<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">${kpi('Tickets du mois', all.length, fmt(sum(all)), 'receipt', 't-info')}${kpi('À facturer', todo.length, fmt(sum(todo)), 'clip', todo.length ? 't-warn' : 't-ok')}${kpi('Déjà facturés', all.length - todo.length, fmt(sum(all.filter(t => isBilled(t, bs)))), 'check', 't-ok')}</div>` +
@@ -953,7 +955,7 @@ async function glSave() {
   if (!GL || BUSY || !needOn()) return;
   const nom = ($('#gl-nom').value || '').trim(); if (!nom) return toast('Indiquez le client.', true);
   BUSY = true;
-  try { const r = await createGlobale({nom}, GL.lines, GL.ids, GL.mois); BUSY = false; GL = null; closeModal(); showDoc({...r.doc, id: r.id}); toast('Facture globale ' + r.numero + ' créée'); }
+  try { const r = await createGlobale({nom}, GL.lines, GL.ids, GL.mois); BUSY = false; GL = null; closeModal(); doneDoc({...r.doc, id: r.id}); toast('Facture globale ' + r.numero + ' créée'); }
   catch (e) { BUSY = false; toast(e.message || 'Création impossible', true); }
 }
 
@@ -1009,7 +1011,7 @@ function openFiche(d) {
   const li = (k, x, amt) => `<li class="row"><span><button type="button" class="cy" style="color:#2563eb;font-weight:600;background:none;border:0;padding:0" data-a="viewdoc" data-k="${k}" data-id="${x.id}">${esc(x.numero)}</button> <span class="text-xs text-mute">${fdate(x.date)}</span></span><span class="tnum font-semibold">${fmt(amt)}</span></li>`;
   showModal('Dossier ' + d.numero, `<div class="text-sm mb-3"><b>${esc((d.client || {}).nom)}</b>${d.lieu ? ' · ' + esc(d.lieu) : ''} ${bd(d.statut, DOSST[d.statut])}<div class="text-mute">${esc(d.desc || '')}</div></div>
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">${[['Devis', t.tDev], ['Facturé', t.tFac], ['Encaissé', t.tEnc], ['Reste à recouvrer', t.reste]].map(([l, v]) => `<div class="card p-3"><div class="text-xs text-mute">${l}</div><div class="font-bold tnum">${fmt(v)}</div></div>`).join('')}</div>
-  <div class="hint mt-2">Montants TTC en DT. Reste = facturé − encaissé (reçus). Les factures annulées par avoir et les devis refusés sont exclus.</div>${ctx.admin ? rentabHtml(d) : ''}${cadmBlock((d.client || {}).nom || '', d.numero)}
+  <div class="hint mt-2">Montants TTC en DT. Reste = facturé − encaissé (reçus). Les factures annulées par avoir et les devis refusés sont exclus.</div>${ctx.admin ? rentabHtml(d) : ''}${cadmBlock((d.client || {}).nom || '', d.numero)}${intHist('', d.numero)}
   ${list('Devis', t.dev, x => li('dev', x, x.totals.ttc))}${list('Factures', t.fac, x => li('fact', x, x.totals.ttc))}${list('Reçus', t.rec, x => li('recu', x, x.montant))}${list('Commandes', D.commandes.filter(x => x.dossier === d.numero), x => li('bc', x, x.totals.ttc))}${list('Interventions', D.interventions.filter(x => x.dossier === d.numero), x => `<li class="row"><span>${esc(x.titre)} <span class="text-xs text-mute">${fdate(x.date)}</span></span><span>${bd(x.statut)}</span></li>`)}${list('Tâches', D.taches.filter(x => x.dossier === d.numero), x => `<li class="row"><span>${esc(x.titre)}</span><span>${bd(x.statut)}</span></li>`)}
   <div class="flex justify-end gap-2 mt-4 flex-wrap">${['Ouvert', 'En cours', 'Clôturé'].filter(s => s !== d.statut).map(s => `<button type="button" class="btn btn-o" data-a="dosstatus" data-id="${d.id}" data-v="${s}">Passer à « ${s} »</button>`).join('')}<button type="button" class="btn btn-p" data-a="close">Fermer</button></div>`, true);
 }
@@ -2014,7 +2016,7 @@ async function saveBLCC(L, client) {
     if (ED.kind === 'CC') {
       const r = await createCC(client, L, {opId: uid() + uid(), dossier: ED.dossier || '', activite: edAct(), ...(ED.from && ED.from.devisId ? {devisId: ED.from.devisId, devisNumero: ED.from.devisNumero || ''} : {})});
       if (ED.from && ED.from.devisId) await ctx.db.doc('devis/' + ED.from.devisId).update({statut: 'Accepté', commandeClient: r.numero});
-      ensureClient(client); BUSY = false; closeModal(); showDoc({...r.doc, id: r.id}); toast('Commande client ' + r.numero + ' enregistrée'); return;
+      ensureClient(client); BUSY = false; closeModal(); doneDoc({...r.doc, id: r.id}); toast('Commande client ' + r.numero + ' enregistrée'); return;
     }
     if (ED.edit) {
       const motif = (ED.motif || '').trim(); if (!motif) { BUSY = false; return toast('Indiquez le motif (retour, erreur de quantité…).', true); }
@@ -2022,7 +2024,7 @@ async function saveBLCC(L, client) {
     }
     const cc = ED.from && ED.from.ccId ? byId(D.cmdclients, ED.from.ccId) : null;
     const r = await createBL(client, L, {opId: uid() + uid(), dossier: ED.dossier || '', activite: edAct(), vehicule: ED.vehicule || '', chauffeur: ED.chauffeur || '', regId: ED.regId || '', ...(cc ? {cmdId: cc.id, cmdNumero: cc.numero} : {})});
-    ensureClient(client); BUSY = false; closeModal(); showDoc({...r.doc, id: r.id}); toast('BL ' + r.numero + ' créé, stock diminué' + (r.conf && r.conf.length ? ' (stock insuffisant signalé)' : ''));
+    ensureClient(client); BUSY = false; closeModal(); doneDoc({...r.doc, id: r.id}); toast('BL ' + r.numero + ' créé, stock diminué' + (r.conf && r.conf.length ? ' (stock insuffisant signalé)' : ''));
   } catch (e) { BUSY = false; toast(e.message || 'Enregistrement impossible', true); }
 }
 
@@ -2049,7 +2051,7 @@ async function invoiceBLs(type) {
     BUSY = true;
     const r = await createFacture(type, bls[0].client, L, {source: 'bl', noStock: true, blIds: bls.map(b => b.id), blNums: bls.map(b => b.numero), dossier: doss.length === 1 ? doss[0] : '', opId: uid() + uid()});
     for (const b of bls) await ctx.db.doc('livraisons/' + b.id).update({statut: 'Facturé', factureNumero: r.numero, factureId: r.id});
-    BLSEL.clear(); BUSY = false; render(); showDoc({...r.doc, id: r.id}); toast('Facture ' + r.numero + ' créée à partir de ' + bls.length + ' BL');
+    BLSEL.clear(); BUSY = false; render(); doneDoc({...r.doc, id: r.id}); toast('Facture ' + r.numero + ' créée à partir de ' + bls.length + ' BL');
   } catch (e) { BUSY = false; toast(e.message || 'Facturation impossible', true); }
 }
 
@@ -2059,7 +2061,7 @@ function vLivraisons() {
   const f = FILT.blst || 'afacturer', q = normS(FILT.blq || '');
   const L = D.livraisons.filter(b => (f === 'tous' || (f === 'afacturer' ? b.statut === 'À facturer' : b.statut === 'Facturé')) && (!q || normS(b.numero + ' ' + b.client.nom + ' ' + (b.dossier || '')).includes(q))).sort((a, b) => b.numero.localeCompare(a.numero));
   [...BLSEL].forEach(id => { const b = byId(D.livraisons, id); if (!b || b.statut !== 'À facturer') BLSEL.delete(id); });
-  const rows = L.map(b => `<tr class="fi"><td>${b.statut === 'À facturer' ? `<input type="checkbox" data-blsel="${b.id}"${BLSEL.has(b.id) ? ' checked' : ''} aria-label="Sélectionner ${esc(b.numero)}">` : ''}</td><td class="font-semibold">${esc(b.numero)}${b.cmdNumero ? `<div class="text-xs text-mute">${esc(b.cmdNumero)}</div>` : ''}${b.modifs ? `<div class="text-xs text-mute">${b.modifs.length} modification(s)</div>` : ''}</td><td>${fdate(b.date)}</td><td>${esc(b.client.nom)}${dosTag(b.dossier)}</td><td class="text-sm">${b.lignes.map(l => esc(l.desig) + ' × ' + l.qte).join('<br>')}</td><td class="num">${fmt(b.totals.ht)}</td><td>${bd(b.statut, BLB[b.statut])}${b.factureNumero ? `<div class="text-xs text-mute">${esc(b.factureNumero)}</div>` : ''}</td><td><div class="acts">${smb('blshow', 'Voir', 'btn-o', 'data-id="' + b.id + '"', 'eye')}${b.statut === 'À facturer' ? smb('bledit', 'Modifier / retour', 'btn-o', 'data-id="' + b.id + '"') + smb('blcancel', 'Annuler', 'btn-o', 'data-id="' + b.id + '"') : ''}</div></td></tr>`).join('') || emptyRow(8, 'Aucun bon de livraison.');
+  const rows = L.map(b => `<tr class="fi"><td>${b.statut === 'À facturer' ? `<input type="checkbox" data-blsel="${b.id}"${BLSEL.has(b.id) ? ' checked' : ''} aria-label="Sélectionner ${esc(b.numero)}">` : ''}</td><td class="font-semibold">${esc(b.numero)}${b.cmdNumero ? `<div class="text-xs text-mute">${esc(b.cmdNumero)}</div>` : ''}${b.modifs ? `<div class="text-xs text-mute">${b.modifs.length} modification(s)</div>` : ''}</td><td>${fdate(b.date)}</td><td>${esc(b.client.nom)}${dosTag(b.dossier)}${regName(b) ? `<div class="text-xs text-mute">${esc(regName(b))}</div>` : ''}</td><td class="text-sm"><details><summary class="lk" style="cursor:pointer">${b.lignes.filter(l => !l.arr).length} article(s)</summary>${b.lignes.filter(l => !l.arr).map(l => esc(l.desig) + ' × ' + l.qte + (l.mo ? ' <span class="text-mute">(main-d\'œuvre)</span>' : '')).join('<br>')}</details></td><td class="num">${fmt(b.totals.ht)}</td><td>${bd(b.statut, BLB[b.statut])}${b.factureNumero ? `<div class="text-xs text-mute">${esc(b.factureNumero)}</div>` : ''}</td><td><div class="acts">${smb('blshow', 'Voir', 'btn-o', 'data-id="' + b.id + '"', 'eye')}${b.statut === 'À facturer' ? smb('bledit', 'Modifier / retour', 'btn-o', 'data-id="' + b.id + '"') + smb('blcancel', 'Annuler', 'btn-o', 'data-id="' + b.id + '"') : ''}</div></td></tr>`).join('') || emptyRow(8, 'Aucun bon de livraison.');
   const sel = `<select class="in" style="width:auto" data-a="filt" data-f="blst">${[['afacturer', 'À facturer'], ['factures', 'Facturés'], ['tous', 'Tous']].map(([v, l]) => `<option value="${v}"${f === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   const afac = blActive().filter(b => b.statut === 'À facturer');
   return head('Bons de livraison', 'Le stock diminue à la livraison. Un BL reste modifiable (retours) jusqu\'à sa facturation.', `<input class="in" style="width:12rem" placeholder="Client, n°, dossier…" data-a="filt" data-f="blq" value="${esc(FILT.blq || '')}">` + sel + btn('blnew', 'Nouveau BL')) +
@@ -2192,8 +2194,8 @@ function blXFields() {
     <div><label class="lb" for="ed-chf">Chauffeur</label><input id="ed-chf" class="in" list="dl-chf" data-edx="chauffeur" value="${esc(ED.chauffeur || '')}"><datalist id="dl-chf">${chf.map(v => `<option value="${esc(v)}">`).join('')}</datalist></div>
     <div style="grid-column:1/-1"><label class="lb" for="ed-reg">Regroupement (facture unique en fin de période)</label>${regQuick('bl', ED.regId)}</div>`;
 }
-PF.regroup = {n: 'Ouvrir un regroupement', e: 'Modifier le regroupement', f: [{k: 'client', l: 'Client', req: 1, w: 1, d: x => (x && x.client && x.client.nom) || ''}, {k: 'nom', l: 'Nom du regroupement', req: 1, w: 1, d: x => (x && x.nom) || ''}, {k: 'note', l: 'Remarque', w: 1, d: x => (x && x.note) || ''}],
-  save: async (v, id) => { if (!v.client || !v.nom) { toast('Client et nom obligatoires.', true); return false; } const c = D.clients.find(x => normS(x.nom) === normS(v.client)) || {}; const client = {nom: v.client.trim(), mf: c.mf || '', adresse: c.adresse || ''};
+PF.regroup = {n: 'Ouvrir un regroupement', e: 'Modifier le regroupement', f: [{k: 'client', l: 'Client', req: 1, w: 1, d: x => (x && x.client && x.client.nom) || ''}, {k: 'nom', l: 'Nom du regroupement (vide = nom automatique REG-CLIENT-001)', w: 1, d: x => (x && x.nom) || ''}, {k: 'note', l: 'Remarque', w: 1, d: x => (x && x.note) || ''}],
+  save: async (v, id) => { if (v.client && !String(v.nom || '').trim()) v.nom = regAutoName(v.client); if (!v.client || !v.nom) { toast('Client et nom obligatoires.', true); return false; } const c = D.clients.find(x => normS(x.nom) === normS(v.client)) || {}; const client = {nom: v.client.trim(), mf: c.mf || '', adresse: c.adresse || ''};
     if (id) await ctx.db.doc('regroupements/' + id).update({nom: v.nom, note: v.note, client}); else await ctx.db.doc('regroupements/' + uid() + uid()).set({nom: v.nom, note: v.note, client, statut: 'Ouvert', date: ds(), ...stamp()}); ensureClient(client); toast('Regroupement enregistré'); }};
 const tkOpen = t => t.statut === 'À facturer' && !billedSet().has(t.id);
 const tkDue = t => t.suivi ? r3(paidOf(t, 'tic') - (+t.avoirTotal || 0)) : tkNet(t);
@@ -2239,7 +2241,7 @@ async function invoiceGroup(type) {
     for (const t of T) await ctx.db.doc('tickets/' + t.id).update({statut: 'Facturé', factureNumero: f.numero, regFacture: true});
     for (const b of B) await ctx.db.doc('livraisons/' + b.id).update({statut: 'Facturé', factureNumero: f.numero, factureId: f.id});
     if (r) await ctx.db.doc('regroupements/' + r.id).update({statut: 'Facturé', factureNumero: f.numero, factureLe: ds()});
-    BUSY = false; GS = null; closeModal(); render(); showDoc({...f.doc, id: f.id}); toast('Facture ' + f.numero + ' créée à partir de ' + C.length + ' pièce(s)');
+    BUSY = false; GS = null; closeModal(); render(); doneDoc({...f.doc, id: f.id}); toast('Facture ' + f.numero + ' créée à partir de ' + C.length + ' pièce(s)');
   } catch (e) { BUSY = false; toast(e.message || 'Facturation impossible', true); }
 }
 const tkPaidForInv = f => f.source === 'regroupement' && f.ticketIds ? sumBy(f.ticketIds.map(id => byId(D.tickets, id)).filter(Boolean), tkDue) : 0;
@@ -2590,10 +2592,10 @@ function regQuick(ctxn, sel) {
 }
 async function regCreate(c) {
   const nom = (($('#rgn-' + c) || {}).value || '').trim(), cl = c === 'cart' ? (CART.client || '').trim() : ((($('#ed-nom') || {}).value) || (ED && ED.client && ED.client.nom) || '').trim();
-  if (!cl) return toast('Indiquez d\'abord le nom du client.', true); if (!nom) return toast('Donnez un nom au regroupement.', true);
+  if (!cl) return toast('Indiquez d\'abord le nom du client.', true); const nom2 = nom || regAutoName(cl); if (!nom2) return toast('Donnez un nom au regroupement.', true);
   const id = uid() + uid(), k = D.clients.find(x => normS(x.nom) === normS(cl)) || {}, client = {nom: cl, mf: k.mf || '', adresse: k.adresse || ''};
-  await ctx.db.doc('regroupements/' + id).set({nom, client, note: '', statut: 'Ouvert', date: ds(), ...stamp()}); ensureClient(client);
-  const s = $(c === 'cart' ? '#cart-reg' : '#ed-reg'); if (s) { s.insertAdjacentHTML('beforeend', `<option value="${id}">${esc(nom)} · ${esc(cl)}</option>`); s.value = id; }
+  await ctx.db.doc('regroupements/' + id).set({nom: nom2, client, note: '', statut: 'Ouvert', date: ds(), ...stamp()}); ensureClient(client);
+  const s = $(c === 'cart' ? '#cart-reg' : '#ed-reg'); if (s) { s.insertAdjacentHTML('beforeend', `<option value="${id}">${esc(nom2)} · ${esc(cl)}</option>`); s.value = id; }
   if (c === 'cart') { CART.reg = id; try { saveLocal(); } catch (e) {} } else if (ED) ED.regId = id;
   const bx = $('#rgnew-' + c); if (bx) bx.hidden = true; toast('Regroupement « ' + nom + ' » créé et sélectionné');
 }
@@ -2633,7 +2635,7 @@ async function saveAvoirP() {
     });
     BUSY = false; AVP = null; closeModal(); render();
     if (exc > 0.0005) { toast('Avoir ' + r.numero + ' créé. Le client avait déjà payé : ' + fmt(exc) + ' à rembourser ou à garder en crédit.'); openPF('trop', null, {client: (f.client || {}).nom || '', montant: exc, avoir: r.numero, avId: r.id}); }
-    else { showDoc(r); toast('Avoir ' + r.numero + ' créé'); }
+    else { doneDoc(r); toast('Avoir ' + r.numero + ' créé'); }
   } catch (e) { BUSY = false; toast(e.message || 'Avoir impossible', true); }
 }
 function vAvoirs() {
@@ -2646,7 +2648,7 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a, id = b.dataset.id;
   switch (a) {
     case 'pdf': if (SHOWN) pdfDoc(SHOWN); break;
-    case 'rgplus': { const bx = $('#rgnew-' + b.dataset.c); if (bx) { bx.hidden = !bx.hidden; const i = $('#rgn-' + b.dataset.c); if (i && !bx.hidden) i.focus(); } break; }
+    case 'rgplus': { const bx = $('#rgnew-' + b.dataset.c); if (bx) { bx.hidden = !bx.hidden; const i = $('#rgn-' + b.dataset.c); if (i && !bx.hidden) { const cl = b.dataset.c === 'cart' ? (CART.client || '') : ((($('#ed-nom') || {}).value) || (ED && ED.client && ED.client.nom) || ''); if (!i.value && cl.trim()) i.value = regAutoName(cl); i.focus(); } } break; }
     case 'rgcreate': wr(() => regCreate(b.dataset.c)); break;
     case 'avp': { const f = byId(D.factures, id); if (f) openAvoirP(f); break; }
     case 'avtk': { const t = byId(D.tickets, id); if (t) openAvoirP(t); break; }
@@ -3526,7 +3528,7 @@ function cliFiche(nom) {
   const y0 = ds().slice(0, 4) + '-01-01';
   showModal('Fiche client · ' + c.nom, `<div class="text-sm">${c.mf ? 'MF ' + esc(c.mf) + ' · ' : ''}${esc(c.tel || '')}${adrFull(c) ? ' · ' + esc(adrFull(c)) : ''}</div>
     <div class="grid gap-2" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:.75rem">${[['CA HT 12 mois', fmt(ca12)], ['CA HT total', fmt(caT)], ['Reste à payer', fmt(du)], ['Crédit (avoirs)', fmt(creditSolde(c.nom))], ['Dernier achat', last ? fdate(last) : '—']].map(([l, v]) => `<div class="card p-3"><div class="text-xs text-mute">${l}</div><div class="font-bold tnum">${v}</div></div>`).join('')}</div>
-    ${cadmBlock(c.nom, '')}
+    ${cadmBlock(c.nom, '')}${intHist(c.nom, '')}
     <div class="card p-3" style="margin-top:.75rem"><b>Relevé de compte</b><div class="flex flex-wrap gap-2 items-end" style="margin-top:.4rem"><div><label class="lb" for="rl-du">Du</label><input id="rl-du" class="in" type="date" value="${y0}"></div><div><label class="lb" for="rl-au">Au</label><input id="rl-au" class="in" type="date" value="${ds()}"></div><button type="button" class="btn btn-p" data-a="rlshow" data-n="${esc(c.nom)}">Voir le relevé</button></div></div>
     ${top.length ? `<h2 class="sec">Articles les plus achetés</h2>` + tbl('<th>Article</th><th class="num">Qté</th><th class="num">HT</th>', top.map(t => `<tr><td>${esc(t.d)}</td><td class="num">${r3(t.q)}</td><td class="num">${fmt(t.ht)}</td></tr>`).join(''), 420) : ''}
     <h2 class="sec">Historique des pièces</h2>` + tbl('<th>Date</th><th>Pièce</th><th>Type</th><th class="num">TTC</th><th>Statut</th>', docs.map(([t, k, d, m]) => `<tr><td>${fdate(d.date)}</td><td>${docLink(k, d)}</td><td>${t}</td><td class="num">${fmt(m)}</td><td>${esc(d.statut || '')}</td></tr>`).join('') || emptyRow(5, 'Aucune pièce.'), 560) + `<div class="flex justify-end mt-3"><button type="button" class="btn btn-p" data-a="close">Fermer</button></div>`, true);
@@ -3751,7 +3753,7 @@ async function rfSave() {
     await ctx.db.doc('retoursfourn/' + a.id).set(doc); await a.cref.set({last: a.seq});
     await applyStock(L, a.numero, -1); doc.id = a.id;
   });
-  RTF = null; closeModal(); toast('Bon de retour ' + doc.numero + ' créé : articles mis de côté'); render(); showDoc(doc);
+  RTF = null; closeModal(); toast('Bon de retour ' + doc.numero + ' créé : articles mis de côté'); render(); doneDoc(doc);
 }
 
 /* ---------- Clôture d'un retour ---------- */
@@ -4150,6 +4152,66 @@ document.addEventListener('change', e => {
   if (t.id === 'ed-reg' && ED) setTimeout(() => { if (ED && ED.regId) { const n = regApply(ED.lignes, ED.regId); if (n) { drawEditor(); toast('Remise du regroupement appliquée à ' + n + ' article(s)'); } } }, 0);
 });
 
+/* ---------- Version finale, lot 1 : pièces et affichage ---------- */
+/* Nom du regroupement d'une pièce (remarque 9) */
+function regName(d) { if (!d) return ''; if (d.regNom) return d.regNom; if (!d.regId) return ''; const r = (D.regroupements || []).find(x => x.id === d.regId); return r ? r.nom || '' : ''; }
+/* Un avoir de ticket reste signalé tant qu'il n'est pas réglé : crédit client pas encore utilisé (remarque 7) */
+function avOuvert(t) {
+  const A = (D.avoirs || []).filter(a => a.ticketId === t.id && a.statut !== 'Annulé');
+  return A.some(a => a.destination === 'Crédit client' && creditSolde(a.client && a.client.nom || (t.client || {}).nom || '') > 0.0005);
+}
+/* BL à l'écran : prix nets, sans colonne ni ligne de remise (remarques 4 et 5) */
+function blEcran(L) {
+  const net = l => r3((+l.pu || 0) * (1 - (+l.rem || 0) / 100)), t = calc(L.map(l => ({...l, pu: net(l), rem: 0})), 'DV');
+  return `<table><thead><tr><th>Code</th><th>Désignation</th><th class="r">Qté</th><th class="r">PU HT</th><th class="r">TVA</th><th class="r">Total HT</th></tr></thead><tbody>${L.map(l => `<tr><td>${esc(refOf(l))}</td><td>${esc(l.desig)}${l.mo ? ' <span style="font-size:.85em;color:#64748b">(main-d\'œuvre, non livrée, facturée avec le BL)</span>' : ''}</td><td class="r">${l.qte}</td><td class="r">${fmt(net(l))}</td><td class="r">${l.tva} %</td><td class="r">${fmt(r3(l.qte * net(l)))}</td></tr>`).join('')}</tbody></table>
+    <div class="bas"><div class="lft"><div class="note" style="margin-top:0">À l'écran seulement : le BL imprimé ne montre que les quantités livrées.</div></div><div class="tt"><div><span>Total HT</span><span>${fmt(t.ht)}</span></div><div><span>Total TVA</span><span>${fmt(t.tva)}</span></div><div class="big"><span>Total TTC</span><span>${fmt(t.ttc)}</span></div></div></div>`;
+}
+/* Pas d'aperçu automatique (remarque 6) : la pièce créée reste accessible dans un petit bandeau */
+let LASTDOC = null, LDT = null;
+function doneDoc(d) {
+  LASTDOC = d; let b = document.getElementById('lastdoc');
+  if (!b) { b = document.createElement('div'); b.id = 'lastdoc'; b.setAttribute('role', 'status'); b.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:60;background:var(--surface,#fff);border:1px solid var(--line,#e5e7eb);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:.6rem .75rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;max-width:calc(100vw - 32px)'; document.body.appendChild(b); }
+  b.innerHTML = `<span class="text-sm"><b>${esc(d.numero || '')}</b> enregistré</span><button type="button" class="btn btn-o btn-sm" data-a="ldshow">${ic('eye')}Aperçu</button>${ctx.dl ? `<button type="button" class="btn btn-p btn-sm" data-a="ldpdf">${ic('down')}Imprimer (PDF)</button>` : ''}<button type="button" class="ib" data-a="ldclose" aria-label="Fermer">✕</button>`;
+  b.hidden = false; clearTimeout(LDT); LDT = setTimeout(() => { b.hidden = true; }, 90000);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a, box = document.getElementById('lastdoc');
+  if (a === 'ldshow' && LASTDOC) { showDoc(LASTDOC); if (box) box.hidden = true; }
+  else if (a === 'ldpdf' && LASTDOC) { pdfDoc(LASTDOC.type === 'FC' ? {...LASTDOC, _complet: LASTDOC.format ? LASTDOC.format === 'complet' : cfg().fcFormat === 'complet'} : LASTDOC); if (box) box.hidden = true; }
+  else if (a === 'ldclose' && box) box.hidden = true;
+  else if (a === 'edaddmo' && typeof ED !== 'undefined' && ED) { ED.lignes.push({id: uid(), aid: null, desig: '', qte: 1, pu: 0, tva: cfg().tva1, mo: true}); drawEditor(); }
+});
+
+/* ---------- Lot 2 : nom de regroupement automatique REG-CLIENT-001 (remarque 17) ---------- */
+const REG_GEN = ['SOCIETE', 'STE', 'ETS', 'ETABLISSEMENT', 'ETABLISSEMENTS', 'SARL', 'SUARL', 'SA', 'SNC', 'SPA', 'ENTREPRISE', 'ENT', 'GROUPE', 'STE.'];
+const REG_ACT = ['ELECTRICITE', 'ELECTRIQUE', 'ELEC', 'BATIMENT', 'TRAVAUX', 'GENERALE', 'GENERAL', 'SERVICE', 'SERVICES', 'DIVERS', 'COMMERCE', 'IMPORT', 'EXPORT', 'ET', 'DE', 'DU', 'DES', 'LA', 'LE', 'LES', 'L', 'D', 'AU', 'AUX'];
+function regShort(nom) {
+  const w = String(nom || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean).filter(x => !REG_GEN.includes(x));
+  const s = w.filter(x => !REG_ACT.includes(x)); return ((s.length ? s : w).slice(0, 2).join('') || 'CLIENT').slice(0, 14);
+}
+function regAutoName(client) {
+  const sh = regShort(client), pre = 'REG-' + sh + '-'; let n = 0;
+  (D.regroupements || []).forEach(r => { const m = String(r.nom || '').toUpperCase().startsWith(pre) ? parseInt(String(r.nom).slice(pre.length), 10) : NaN; if (m > n) n = m; });
+  return pre + String(n + 1).padStart(3, '0');
+}
+
+/* ---------- Lot 2 : historique des interventions dans la fiche client et la fiche dossier (remarque 21) ---------- */
+function intOf(client, dossier) {
+  const dos = new Set(client ? (D.dossiers || []).filter(x => normS((x.client || {}).nom || '') === normS(client)).map(x => x.numero) : []);
+  return (D.interventions || []).filter(i => dossier ? i.dossier === dossier : (normS(i.client || '') === normS(client) || (i.dossier && dos.has(i.dossier))))
+    .sort((a, b) => ((b.date || '') + (b.heure || '')).localeCompare((a.date || '') + (a.heure || '')));
+}
+function intHist(client, dossier) {
+  if (!client && !dossier) return ''; const L = intOf(client, dossier);
+  const mat = i => String((i.fiche && i.fiche.materiel) || '').split('\n').map(s => s.trim()).filter(Boolean);
+  return `<div class="mt-3"><div class="text-xs font-semibold uppercase tracking-wider text-mute mb-1">Historique des interventions (${L.length})</div>` + (L.length ? tbl('<th>Date</th><th>Intervention</th><th>Technicien(s)</th><th>Statut</th><th>Travaux réalisés</th><th>Matériel</th><th></th>', L.map(i => `<tr><td>${fdate(i.date)}${i.heure ? '<div class="text-xs text-mute">' + esc(i.heure) + '</div>' : ''}</td><td class="font-medium">${esc(i.titre || '')}${i.dossier && !dossier ? `<div class="text-xs text-mute">${esc(i.dossier)}</div>` : ''}</td><td class="text-sm">${esc(ivTech(i) || '—')}</td><td>${bd(i.statut || '')}</td><td class="text-sm">${esc(((i.fiche && i.fiche.travaux) || '').slice(0, 140))}</td><td class="text-sm">${mat(i).slice(0, 3).map(esc).join('<br>')}${mat(i).length > 3 ? '<br>…' : ''}</td><td>${i.fiche ? smb('intcr', 'Compte rendu', 'btn-o', 'data-id="' + i.id + '"', 'eye') : ''}</td></tr>`).join(''), 820) : '<p class="hint" style="margin:0">Aucune intervention enregistrée.</p>') + '</div>';
+}
+function intCR(i) {
+  const f = i.fiche || {}, row = (l, v) => v ? `<tr><th style="text-align:left;width:34%;vertical-align:top">${l}</th><td style="white-space:pre-line">${esc(v)}</td></tr>` : '';
+  showModal('Compte rendu · ' + (i.titre || ''), `<div class="tw"><table class="tbl">${row('Date', fdate(i.date) + (i.heure ? ' à ' + i.heure : ''))}${row('Client', i.client)}${row('Lieu', i.lieu)}${row('Dossier', i.dossier)}${row('Technicien(s)', ivTech(i))}${row('Arrivée / départ', [f.arrivee, f.depart].filter(Boolean).join(' → '))}${row('Travaux réalisés', f.travaux)}${row('Matériel utilisé', f.materiel)}${row('Observations', f.observations)}${row('Résultat', f.resultat || i.statut)}${row('Réceptionné par', f.client)}${row('Fiche remplie le', f.le ? fdate(f.le.slice(0, 10)) : '')}</table></div><div class="flex justify-end mt-3"><button type="button" class="btn btn-p" data-a="close">Fermer</button></div>`);
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-a="intcr"]'); if (!b) return; const i = byId(D.interventions, b.dataset.id); if (i) { if (!document.getElementById('ov').hidden) pushModal(); intCR(i); } });
+
 /* ---------- Modules, rendu, navigation ---------- */
 const ALL = ['admin', 'commercial', 'comptoir', 'technicien', 'rh'];
 const MODULES = [
@@ -4271,7 +4333,7 @@ document.addEventListener('click', e => {
     case 'preview': if (CART.lignes.length) showDoc(cartDoc({isProv: false, numero: 'APERÇU'})); break;
     case 'devisCart': if (CART.lignes.length) { openEditor('DV', {client: {nom: CART.client}, lignes: CART.lignes.map(l => ({aid: l.aid, desig: l.desig, qte: l.qte, pu: l.pu, tva: l.tva}))}); } break;
     case 'cash': cash(false); break;
-    case 'cashFC': cash(true); break;
+    case 'cashFC': cash(true, b.dataset.f); break;
     case 'newglobal': openGlobal(); break;
     case 'glsave': glSave(); break;
     case 'newdos': openForm('dossier'); break;
