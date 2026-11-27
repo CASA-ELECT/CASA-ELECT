@@ -6,9 +6,9 @@
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
--- Abonnements des téléphones : lisibles seulement par l'administrateur (et par la fonction d'envoi)
-insert into public.regles (col, lire, ecrire, soi_lire, soi_ecrire) values ('pushsubs', 'admin', 'tous', false, false), ('pushlog', 'admin', 'admin', false, false)
-on conflict (col) do nothing;
+-- Abonnements des téléphones : chaque employé enregistre le sien (une adresse d'abonnement ne permet pas d'envoyer sans la clé privée)
+insert into public.regles (col, lire, ecrire, soi_lire, soi_ecrire) values ('pushsubs', 'tous', 'tous', false, false), ('pushlog', 'admin', 'admin', false, false)
+on conflict (col) do update set lire = excluded.lire, ecrire = excluded.ecrire;
 
 -- Appel de la fonction d'envoi toutes les 5 minutes
 select cron.unschedule('casa-rappels') where exists (select 1 from cron.job where jobname = 'casa-rappels');
