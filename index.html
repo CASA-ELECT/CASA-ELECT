@@ -311,15 +311,20 @@ async function already(col, opId) {
   const s = await ctx.db.collection(col).where('opId', '==', opId).limit(1).get();
   return s.empty ? null : {id: s.docs[0].id, numero: s.docs[0].data().numero, conf: [], doc: s.docs[0].data(), dup: true};
 }
+let NO_RPC = false;
 async function applyStock(lignes, numero, sign = -1) {
   const out = [];
   for (const l of lignes) {
     if (!l.aid) continue;
     const q = +l.qte || 0; let st, ns, nm = '', rf = '';
     /* tout article peut être vendu à stock zéro : le stock devient négatif (vendu avant d'être reçu), la réception le ramène à zéro */
-    if (window.CASA_SB) { /* version en ligne : le stock est calculé dans la base, en une seule opération (remarque 23) */
-      const {data, error} = await window.CASA_SB.rpc('stock_maj', {p_aid: l.aid, p_delta: r3(sign * q)}); if (error) throw error; if (!data) continue; st = +data.avant; ns = +data.apres; nm = data.nom || ''; rf = data.ref || '';
-    } else { const ref = ctx.db.doc('articles/' + l.aid), s = await ref.get(); if (!s.exists) continue; st = +s.data().stock || 0; ns = r3(st + sign * q); nm = s.data().nom || ''; rf = s.data().ref || ''; await ref.update({stock: ns}); }
+    let viaRpc = false;
+    if (window.CASA_SB && !NO_RPC) { /* version en ligne : le stock est calculé dans la base, en une seule opération (remarque 23) */
+      const {data, error} = await window.CASA_SB.rpc('stock_maj', {p_aid: l.aid, p_delta: r3(sign * q)});
+      if (error && (error.code === 'PGRST202' || /stock_maj|function/i.test(error.message || ''))) NO_RPC = true; /* script SQL 3 pas encore installé */
+      else if (error) throw error; else { if (!data) continue; viaRpc = true; st = +data.avant; ns = +data.apres; nm = data.nom || ''; rf = data.ref || ''; }
+    }
+    if (!viaRpc) { const ref = ctx.db.doc('articles/' + l.aid), s = await ref.get(); if (!s.exists) continue; st = +s.data().stock || 0; ns = r3(st + sign * q); nm = s.data().nom || ''; rf = s.data().ref || ''; await ref.update({stock: ns}); }
     try { await ctx.db.doc('mouvements/' + uid() + uid()).set({aid: l.aid, nom: nm, ref: rf, qte: r3(sign * q), avant: st, apres: ns, numero: numero || '', date: ds(), at: new Date().toISOString(), by: ctx.uid || ''}); } catch (e) {}
     if (false) {
       const c = {numero, article: s.data().nom, demande: q, dispo: st, date: ds()};
