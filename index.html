@@ -267,6 +267,7 @@ const DEF = {raison: 'CASA-ELECT', mf: '', adresse: '', tel: '', email: '', tva1
 const cfg = () => ({...DEF, ...(D.settings || {})});
 const ROLES = {admin: 'Administrateur', commercial: 'Technico-commercial', technicien: 'Technicien', comptoir: 'Vente comptoir', rh: 'RH'};
 const myRole = () => ctx.admin ? 'admin' : ((D.staff[ctx.uid] || {}).role || null);
+function myRoles() { if (ctx.admin) return ['admin']; const s = D.staff[ctx.uid] || {}; if (!s.role) return []; const t = ds(); return [...new Set([s.role, ...(s.roles || []), ...(s.temp || []).filter(x => x && x.du <= t && x.au >= t).map(x => x.role)])]; }
 
 /* ---------- Calcul fiscal ---------- */
 function calc(lignes, type, S = cfg()) {
@@ -314,12 +315,12 @@ async function applyStock(lignes, numero, sign = -1) {
   const out = [];
   for (const l of lignes) {
     if (!l.aid) continue;
-    const ref = ctx.db.doc('articles/' + l.aid), s = await ref.get(); if (!s.exists) continue;
-    const st = +s.data().stock || 0, q = +l.qte || 0;
+    const q = +l.qte || 0; let st, ns, nm = '', rf = '';
     /* tout article peut être vendu à stock zéro : le stock devient négatif (vendu avant d'être reçu), la réception le ramène à zéro */
-    const ns = r3(st + sign * q);
-    await ref.update({stock: ns});
-    try { await ctx.db.doc('mouvements/' + uid() + uid()).set({aid: l.aid, nom: s.data().nom || '', ref: s.data().ref || '', qte: r3(sign * q), avant: st, apres: ns, numero: numero || '', date: ds(), at: new Date().toISOString(), by: ctx.uid || ''}); } catch (e) {}
+    if (window.CASA_SB) { /* version en ligne : le stock est calculé dans la base, en une seule opération (remarque 23) */
+      const {data, error} = await window.CASA_SB.rpc('stock_maj', {p_aid: l.aid, p_delta: r3(sign * q)}); if (error) throw error; if (!data) continue; st = +data.avant; ns = +data.apres; nm = data.nom || ''; rf = data.ref || '';
+    } else { const ref = ctx.db.doc('articles/' + l.aid), s = await ref.get(); if (!s.exists) continue; st = +s.data().stock || 0; ns = r3(st + sign * q); nm = s.data().nom || ''; rf = s.data().ref || ''; await ref.update({stock: ns}); }
+    try { await ctx.db.doc('mouvements/' + uid() + uid()).set({aid: l.aid, nom: nm, ref: rf, qte: r3(sign * q), avant: st, apres: ns, numero: numero || '', date: ds(), at: new Date().toISOString(), by: ctx.uid || ''}); } catch (e) {}
     if (false) {
       const c = {numero, article: s.data().nom, demande: q, dispo: st, date: ds()};
       await ctx.db.collection('conflicts').add(c); out.push(c);
@@ -456,7 +457,7 @@ function startSubs() {
   const db = ctx.db, on = (q, fn) => q.onSnapshot(s => { fn(s); rq(); }, e => { ctx.err = e.code || 'erreur'; rq(); });
   on(db.doc('settings/company'), s => { D.settings = s.exists ? s.data() : null; });
   [['articles', 'articles'], ['services', 'services'], ['installateurs', 'installateurs'], ['points', 'points'], ['formfab', 'formfab'], ['fournisseurs', 'fournisseurs'], ['livraisons', 'livraisons'], ['regroupements', 'regroupements'], ['modeles', 'modeles'], ['personnel', 'personnel'], ['credits', 'credits'], ['inventaires', 'inventaires'], ['comptages', 'comptages'], ['remboursements', 'remboursements'], ['sorties', 'sorties'], ['cmdclients', 'cmdclients'], ['receptions', 'receptions'], ['mouvements', 'mouvements'], ['dossiers', 'dossiers'], ['clients', 'clients'], ['prospects', 'prospects'], ['problemes', 'problemes'], ['besoins', 'besoins'], ['journal', 'journal'], ['commandes', 'commandes'], ['interventions', 'interventions'], ['taches', 'taches'], ['paiements', 'paiements'], ['tickets', 'tickets'], ['factures', 'factures'], ['devis', 'devis'], ['recus', 'recus'], ['avoirs', 'avoirs'], ['conflicts', 'conflicts']]
-    .forEach(([c, k]) => on(db.collection(c), s => { D[k] = s.docs.map(d => ({id: d.id, ...d.data()})); }));
+    .forEach(([c, k]) => on(db.collection(c), s => { D[k] = s.docs.map(d => ({id: d.id, ...d.data()})); if (k === 'articles') mergeCouts(); }));
   [['staff', 'staff'], ['counters', 'counters']].concat(ctx.admin ? [['requests', 'requests']] : [])
     .forEach(([c, k]) => on(db.collection(c), s => { D[k] = {}; s.docs.forEach(d => { D[k][d.id] = d.data(); }); }));
   /* RH : l'administrateur lit tout ; chaque employé ne lit que ses propres documents */
@@ -611,7 +612,7 @@ const tbl = (cols, rows, min = 700) => `<section class="card"><div class="tw"><t
 const kpi = (label, val, sub, icon, tone) => `<div class="card p-4"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="text-xs font-semibold uppercase tracking-wider text-mute">${label}</div><div class="kv text-[1.55rem] font-bold leading-tight mt-1">${val}</div></div><span class="ico ${tone}">${ic(icon)}</span></div><div class="text-xs text-mute mt-2">${sub}</div></div>`;
 const sorted = a => [...a].sort((x, y) => (y.at || '').localeCompare(x.at || ''));
 const cname = d => (d.client && d.client.nom) || 'Client comptoir';
-const can = (...r) => r.includes(myRole());
+const can = (...r) => myRoles().some(x => r.includes(x));
 
 /* ---------- Tableau de bord ---------- */
 function vDash() {
@@ -825,7 +826,7 @@ function openEditor(kind, pre = {}) {
   drawEditor();
 }
 function edLines() { return ED.lignes.map(l => { if (ED.kind !== 'TC') return l; const same = l.pu0 != null && Math.abs(l.ttc - ttcU({pu: l.pu0, tva: l.tva, rem: l.rem})) < 0.0005; return same ? {...l, pu: l.pu0} : {...l, pu: Math.round(l.ttc / (1 + l.tva / 100) * 1e6) / 1e6, rem: 0}; }); }
-const canPA = () => can('admin', 'commercial') || (cfg().paComptoir && can('comptoir'));
+const canPA = () => ctx.admin || myRoles().some(r => sensOf(r, 'pa')) || (cfg().paComptoir && can('comptoir'));
 /* devis : marge calculée sur le dernier prix d'achat ; ventes et factures : sur le coût moyen pondéré */
 /* Arrondi des prix de vente : prix TTC arrondi VERS LE HAUT au pas choisi (0,010 DT → 1,200 ; 0,100 DT → 1,300…), prix HT gardé à 3 décimales.
    Les petits prix (TTC sous le minimum, ex. vis, cheville) restent tels quels. Renvoie le prix HT à enregistrer. */
@@ -2396,9 +2397,10 @@ const pOf = k => D.personnel.find(p => p.id === k || p.uid === k);
 const pActifs = () => D.personnel.filter(p => p.statut !== 'Sorti');
 const MOTIFS = ['Démission', 'Fin de contrat', 'Licenciement', 'Retraite', 'Autre'];
 const RSEL = Object.keys(ROLES).filter(r => r !== 'admin');
-PF.personnel = {n: 'Nouveau salarié', e: 'Modifier le salarié', f: [{k: 'nom', l: 'Nom et prénom', req: 1, w: 1}, {k: 'poste', l: 'Poste (ex. électricien, vendeur)'}, {k: 'role', l: 'Profil dans l\'application', t: 'select', o: RSEL.map(r => [r, ROLES[r]]), d: 'technicien'}, {k: 'tel', l: 'Téléphone'}, {k: 'embauche', l: 'Date d\'embauche', t: 'date', d: () => ds()}, {k: 'matricule', l: 'Matricule interne'}, {k: 'note', l: 'Remarque', w: 1}],
+PF.personnel = {n: 'Nouveau salarié', e: 'Modifier le salarié', f: [{k: 'nom', l: 'Nom et prénom', req: 1, w: 1}, {k: 'poste', l: 'Poste (ex. électricien, vendeur)'}, {k: 'role', l: 'Profil dans l\'application', t: 'select', o: RSEL.map(r => [r, ROLES[r]]), d: 'technicien'}, {k: 'roles', l: 'Profils supplémentaires (cumul permanent)', t: 'multi', o: () => RSEL.map(r => [r, ROLES[r]]), d: []}, {k: 'tmpRole', l: 'Remplacement provisoire : profil', t: 'select', o: () => [['', '— Aucun —'], ...RSEL.map(r => [r, ROLES[r]])], d: ''}, {k: 'tmpQui', l: 'Remplace (nom du collègue)'}, {k: 'tmpDu', l: 'Remplacement du', t: 'date', d: ''}, {k: 'tmpAu', l: 'Remplacement au', t: 'date', d: ''}, {k: 'tel', l: 'Téléphone'}, {k: 'embauche', l: 'Date d\'embauche', t: 'date', d: () => ds()}, {k: 'matricule', l: 'Matricule interne'}, {k: 'note', l: 'Remarque', w: 1}],
   save: async (v, id) => { if (!v.nom) { toast('Indiquez le nom.', true); return false; }
-    if (id) { const p = byId(D.personnel, id); await ctx.db.doc('personnel/' + id).update(v); if (p && p.uid && p.statut !== 'Sorti') await ctx.db.doc('staff/' + p.uid).set({role: v.role, pid: id}); }
+    if (v.tmpRole && (!v.tmpDu || !v.tmpAu || v.tmpAu < v.tmpDu)) { toast('Remplacement provisoire : indiquez les dates du … au …', true); return false; } v.roles = (v.roles || []).filter(r => r !== v.role);
+    if (id) { const p = byId(D.personnel, id); if (v.tmpRole && p && (p.tmpRole !== v.tmpRole || p.tmpDu !== v.tmpDu || p.tmpAu !== v.tmpAu)) v.tmpHist = [...(p.tmpHist || []), {role: v.tmpRole, du: v.tmpDu, au: v.tmpAu, qui: v.tmpQui || '', le: ds(), par: ctx.uid || ''}]; await ctx.db.doc('personnel/' + id).update(v); if (p && p.uid && p.statut !== 'Sorti') await ctx.db.doc('staff/' + p.uid).set({role: v.role, pid: id, ...staffExtra({...p, ...v})}); }
     else await ctx.db.doc('personnel/' + uid() + uid()).set({...v, statut: 'Actif', ...stamp()});
     toast('Fiche salarié enregistrée'); }};
 PF.sortie = {n: 'Départ du salarié', ok: 'Enregistrer le départ et bloquer l\'accès', f: [{k: 'sortie', l: 'Date de sortie', t: 'date', d: () => ds()}, {k: 'motifSortie', l: 'Motif', t: 'select', o: MOTIFS, d: 'Démission'}, {k: 'noteSortie', l: 'Remarque', w: 1}],
@@ -2421,7 +2423,7 @@ async function linkAccount(u, target, role) {
   let p = target === 'new' ? null : byId(D.personnel, target);
   if (!p) { const id = uid() + uid(); p = {id, nom: nameOf(u), poste: '', role, embauche: ds(), statut: 'Actif'}; await ctx.db.doc('personnel/' + id).set({...p, uid: u, ...stamp()}); }
   else { if (p.uid && p.uid !== u) throw new Error('Cette fiche est déjà rattachée à un autre compte.'); await migrateKey(p.id, u); await ctx.db.doc('personnel/' + p.id).update({uid: u}); }
-  await ctx.db.doc('staff/' + u).set({role: p.role || role, pid: p.id}); await ctx.db.doc('requests/' + u).delete();
+  await ctx.db.doc('staff/' + u).set({role: p.role || role, pid: p.id, ...staffExtra(p)}); await ctx.db.doc('requests/' + u).delete();
 }
 function vPersonnel() {
   const f = FILT.pst || 'Actif', blockedU = new Set(D.personnel.filter(p => p.statut === 'Sorti' && p.uid).map(p => p.uid));
@@ -2445,7 +2447,7 @@ document.addEventListener('click', e => {
     case 'pnew': openPF('personnel'); break;
     case 'pedit': openPF('personnel', byId(D.personnel, id)); break;
     case 'pout': if (byId(D.personnel, id)) openPF('sortie', null, {id}); break;
-    case 'pback': { if (!arm(b, 'Réintégrer ?')) return; const p = byId(D.personnel, id); if (p) wr(async () => { await ctx.db.doc('personnel/' + id).update({statut: 'Actif', reintegre: ds()}); if (p.uid) await ctx.db.doc('staff/' + p.uid).set({role: p.role, pid: p.id}); toast('Salarié réintégré'); }); break; }
+    case 'pback': { if (!arm(b, 'Réintégrer ?')) return; const p = byId(D.personnel, id); if (p) wr(async () => { await ctx.db.doc('personnel/' + id).update({statut: 'Actif', reintegre: ds()}); if (p.uid) await ctx.db.doc('staff/' + p.uid).set({role: p.role, pid: p.id, ...staffExtra(p)}); toast('Salarié réintégré'); }); break; }
     case 'prh': { const p = byId(D.personnel, id); if (p) openPF('rhfiche', rhOf(pkey(p)), {u: pkey(p)}); break; }
     case 'plink': { const t = ($('#rql-' + id) || {}).value || 'new', r = ($('#rqr-' + id) || {}).value || 'technicien'; wr(async () => { await linkAccount(id, t, r); toast('Compte rattaché à la fiche'); }); break; }
     case 'plegacy': wr(async () => { const s = D.staff[id]; await ctx.db.doc('personnel/' + uid() + uid()).set({nom: nameOf(id), poste: '', role: s.role, uid: id, embauche: ds(), statut: 'Actif', ...stamp()}); toast('Fiche créée'); }); break;
@@ -4007,7 +4009,7 @@ const QADD = [
 function qaddDecorate() {
   const mb = $('#mb'); if (!mb || $('#ov').hidden) return; const role = myRole();
   QADD.forEach((r, i) => mb.querySelectorAll(r.sel).forEach(el => {
-    if (el.dataset.qadd || el.disabled || !r.roles.includes(role)) return;
+    if (el.dataset.qadd || el.disabled || !r.roles.some(x => myRoles().includes(x))) return;
     /* pas de « + » dans le formulaire qui crée justement ce type de fiche */
     const fm = el.closest('form'); if (fm && ((r.what === 'client' && fm.dataset.form === 'client') || (r.what === 'dossier' && fm.dataset.form === 'dossier'))) return;
     const t = 'q' + uid(); el.dataset.qadd = t;
@@ -4115,7 +4117,7 @@ async function accesCreate(p) {
   if (error) return toast(/registered|already/i.test(error.message) ? 'Cet e-mail a déjà un compte.' : /rate|limit/i.test(error.message) ? 'Trop de créations en peu de temps : réessayez dans une heure.' : error.message, true);
   if (!data.user || !data.session) return toast('Compte créé mais en attente de confirmation par e-mail : désactivez « Confirm email » dans Supabase (Authentication → Sign In / Providers → Email), puis validez ce compte dans « Demandes d\'accès ».', true);
   const uid = data.user.id; try { await tmp.auth.signOut(); } catch (x) {}
-  await ctx.db.doc('staff/' + uid).set({role, pid: p.id});
+  await ctx.db.doc('staff/' + uid).set({role, pid: p.id, ...staffExtra(p)});
   await ctx.db.doc('personnel/' + p.id).update({uid, email, role});
   try { await ctx.db.doc('requests/' + uid).delete(); } catch (x) {}
   showModal('Accès créé', `<div class="grid gap-3"><p style="margin:0">Donnez ces informations à <b>${esc(p.nom)}</b> :</p>
@@ -4433,6 +4435,100 @@ document.addEventListener('click', e => {
   else if (a === 'fidlink') openPF('fidlink', null, {id, kind: b.dataset.k});
 });
 
+/* ---------- Lot 6 : profils multiples, rôles & droits réels, prix d'achat à part (remarques 2, 18, 24) ---------- */
+function staffExtra(p) { const t = p.tmpRole && p.tmpDu && p.tmpAu ? [{role: p.tmpRole, du: p.tmpDu, au: p.tmpAu, qui: p.tmpQui || ''}] : []; return {roles: (p.roles || []).filter(r => r && r !== p.role), temp: t}; }
+/* Droits : niveau 0 aucun · 1 voir · 2 créer/modifier · 3 tout (supprimer compris) */
+const NIV = ['Aucun', 'Voir', 'Modifier', 'Tout'];
+const DROLES = ['commercial', 'technicien', 'comptoir', 'rh'];
+const MOD_FIXE = ['equipe', 'droits', 'params', 'sauvegarde', 'reprise']; /* toujours réservés à l'administrateur */
+const MODCOLS = {stats: ['factures', 'tickets', 'avoirs', 'paiements'], tplanning: ['interventions', 'problemes', 'besoins'], tchantier: ['dossiers', 'interventions'], tretours: ['problemes', 'besoins'],
+  vente: ['tickets', 'factures', 'paiements', 'credits', 'clients', 'regroupements', 'devis'], tickets: ['tickets', 'factures', 'avoirs', 'paiements', 'credits', 'remboursements'], dossiers: ['dossiers'], factures: ['factures', 'paiements', 'avoirs', 'credits'],
+  avoirs: ['avoirs', 'factures', 'tickets', 'credits', 'remboursements', 'paiements'], devis: ['devis', 'clients'], cmdclients: ['cmdclients', 'clients'], livraisons: ['livraisons', 'cmdclients', 'factures', 'clients', 'regroupements'],
+  fidelite: ['installateurs', 'points', 'formfab'], regroup: ['regroupements', 'factures', 'tickets', 'livraisons'], recus: ['recus', 'paiements'], stock: ['articles', 'sorties'], inventaire: ['inventaires', 'comptages', 'articles'], clients: ['clients'],
+  io: ['articles', 'clients', 'fournisseurs', 'dossiers'], prospects: ['prospects'], suivi: ['devis'], commandes: ['commandes', 'fournisseurs'], retours: ['problemes', 'besoins'], interv: ['interventions'], planning: ['interventions'], taches: ['taches'],
+  effets: ['paiements'], recouv: ['paiements', 'factures'], fournisseurs: ['fournisseurs'], receptions: ['receptions', 'commandes', 'articles'], retfourn: ['retoursfourn', 'avoirsfourn'], reappro: ['commandes'],
+  facfourn: ['facfourn', 'reglfourn', 'avoirsfourn'], echfourn: ['facfourn', 'reglfourn'], retenues: ['reglfourn', 'depenses'], depenses: ['depenses'], caisse: ['caisse', 'clotures'], banques: ['caisse'], sorties: ['sorties', 'articles'],
+  mouvements: [], analyse: [], rechart: [], etatstock: [], rentab: [], monrh: [], rh: ['rh', 'pointages', 'demandes', 'rhformations', 'rhrecrut'], services: ['services', 'modeles'], modeles: ['modeles', 'depenses'], contactsadm: ['contactsadm'], propositions: []};
+const CORE_READ = ['articles', 'clients', 'dossiers', 'services', 'regroupements', 'modeles', 'interventions', 'personnel', 'fournisseurs', 'installateurs', 'points'];
+const SENS = [['pa', 'Prix d\'achat et marges'], ['caisse', 'Caisse et banques'], ['salaires', 'Salaires et fiches RH']];
+const droitsCfg = () => (D.settings && D.settings.droits) || null;
+function lvDef(role, m) { return MOD_FIXE.includes(m.id) ? 0 : m.roles.includes(role) ? 3 : 0; }
+let DRD = null; /* modifications en cours dans l'écran Rôles & droits (gardées si l'écran se rafraîchit) */
+function lvOf(role, m, dr) { if (MOD_FIXE.includes(m.id)) return 0; if (dr && DRD && DRD.lv[role] && DRD.lv[role][m.id] != null) return DRD.lv[role][m.id]; const c = droitsCfg(); const v = c && c.lv && c.lv[role] && c.lv[role][m.id]; return v == null ? lvDef(role, m) : +v; }
+function sensOf(role, k, dr) { if (dr && DRD && DRD.sens[role] && DRD.sens[role][k] != null) return DRD.sens[role][k]; const c = droitsCfg(), v = c && c.sens && c.sens[role] && c.sens[role][k]; return v == null ? (k === 'pa' ? ['commercial'].includes(role) : false) : !!v; }
+function modOk(m) { if (ctx.admin) return m.roles.includes('admin') || m.id === 'droits'; if (MOD_FIXE.includes(m.id)) return false; return myRoles().some(r => lvOf(r, m) >= 1); }
+function modLv(id) { if (ctx.admin) return 3; const m = MODULES.find(x => x.id === id); return m ? Math.max(0, ...myRoles().map(r => lvOf(r, m))) : 0; }
+function droitsDb(lv, sens) {
+  const out = {}; DROLES.forEach(r => { const o = {}, set = (c, n) => { o[c] = Math.max(o[c] || 0, n); };
+    MODULES.forEach(m => { if (MOD_FIXE.includes(m.id)) return; const n = lv[r] && lv[r][m.id] != null ? +lv[r][m.id] : lvDef(r, m); (MODCOLS[m.id] || []).forEach(c => set(c, n)); });
+    Object.values(MODCOLS).flat().forEach(c => { if (!(c in o)) o[c] = 0; }); CORE_READ.forEach(c => set(c, 1));
+    if (!(sens[r] && sens[r].caisse)) { o.caisse = Math.min(o.caisse || 0, 0); o.clotures = Math.min(o.clotures || 0, 0); }
+    if (!(sens[r] && sens[r].salaires)) ['rh'].forEach(c => { o[c] = 0; });
+    o.couts = (sens[r] && sens[r].pa) ? Math.max(1, o.articles >= 2 ? 2 : 1) : 0;
+    /* une vente modifie le stock (fonction de la base), le journal et les mouvements : collections techniques non bloquées */
+    out[r] = o; });
+  return out;
+}
+function vDroits() {
+  const c = droitsCfg() || {}, M = MODULES.filter(m => !MOD_FIXE.includes(m.id) && m.id !== 'droits');
+  const sel = (r, m) => { const v = lvOf(r, m, true); return `<select class="in" style="padding:.15rem .3rem;width:auto" data-dr="${r}" data-m="${m.id}">${NIV.map((l, i) => `<option value="${i}"${i === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`; };
+  let last = '', rows = '';
+  M.forEach(m => { if (m.sep && m.sep !== last) { last = m.sep; rows += `<tr><td colspan="${DROLES.length + 1}" class="font-semibold" style="background:var(--surface-2,#f1f5f9)">${esc(m.sep)}</td></tr>`; } rows += `<tr><td>${esc(m.label)}</td>${DROLES.map(r => `<td>${sel(r, m)}</td>`).join('')}</tr>`; });
+  const sens = SENS.map(([k, l]) => `<tr><td class="font-medium">${l}</td>${DROLES.map(r => `<td><label class="chk"><input type="checkbox" data-ds="${r}" data-k="${k}"${sensOf(r, k, true) ? ' checked' : ''}> autorisé</label></td>`).join('')}</tr>`).join('');
+  return head('Rôles & droits', 'Pour chaque profil : ce qu\'il voit et ce qu\'il peut faire. Les droits sont appliqués aussi dans la base de données, pas seulement en cachant les menus.', btn('drsave', 'Enregistrer les droits', 'btn-p', '', 'check') + btn('drreset', 'Revenir aux droits par défaut', 'btn-o', '', 'sync')) +
+    `<p class="hint">Voir : consulter seulement · Modifier : créer et modifier · Tout : supprimer aussi. L'administrateur garde toujours tous les droits ; Paramétrage, Personnel, Rôles & droits, Sauvegarde et Reprise lui restent réservés. Un employé avec plusieurs profils cumule leurs droits. ${c.le ? 'Dernière mise à jour : ' + fdate(c.le) + '.' : 'Droits par défaut en vigueur.'}</p>` +
+    tbl(`<th>Informations sensibles</th>${DROLES.map(r => `<th>${esc(ROLES[r])}</th>`).join('')}`, sens, 700) + '<div style="height:.75rem"></div>' +
+    tbl(`<th>Menu</th>${DROLES.map(r => `<th>${esc(ROLES[r])}</th>`).join('')}`, rows, 760);
+}
+async function droitsSave(reset) {
+  const lv = {}, sens = {};
+  if (!reset) { const M = MODULES.filter(m => !MOD_FIXE.includes(m.id) && m.id !== 'droits'); DROLES.forEach(r => { lv[r] = {}; M.forEach(m => { lv[r][m.id] = lvOf(r, m, true); }); sens[r] = {}; SENS.forEach(([k]) => { sens[r][k] = sensOf(r, k, true); }); }); }
+  else DROLES.forEach(r => { sens[r] = {pa: r === 'commercial', caisse: false, salaires: false}; });
+  await ctx.db.doc('settings/company').update({droits: {lv, sens, le: ds()}});
+  await ctx.db.doc('settings/droitsdb').set({roles: droitsDb(lv, sens), le: new Date().toISOString()});
+  DRD = null; toast(reset ? 'Droits par défaut rétablis' : 'Droits enregistrés et appliqués dans la base');
+}
+document.addEventListener('change', e => { const t = e.target; if (!t.dataset) return; if (t.dataset.dr || t.dataset.ds) { DRD = DRD || {lv: {}, sens: {}}; if (t.dataset.dr) (DRD.lv[t.dataset.dr] = DRD.lv[t.dataset.dr] || {})[t.dataset.m] = +t.value; else (DRD.sens[t.dataset.ds] = DRD.sens[t.dataset.ds] || {})[t.dataset.k] = t.checked; } });
+document.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (!b) return; if (b.dataset.a === 'drsave' && needOn()) wr(() => droitsSave(false)); else if (b.dataset.a === 'drreset' && needOn()) { if (!arm(b, 'Rétablir ?')) return; wr(() => droitsSave(true)); } });
+
+/* Prix d'achat rangés à part (collection « couts ») : lus seulement par les profils autorisés */
+let COUTS = {};
+function mergeCouts() { if (!D.articles) return; D.articles.forEach(a => { const c = COUTS[a.id]; if (c) { if (c.pa != null) a.pa = c.pa; if (c.paDernier != null) a.paDernier = c.paDernier; } }); }
+function wrapDb(db) {
+  /* L'objet fourni par la plateforme est figé : on ne le modifie pas, on l'enveloppe dans un objet neuf */
+  if (!db) return db; const bindAll = o => { const w = {}; let x = o; const seen = new Set(); while (x && x !== Object.prototype) { Object.getOwnPropertyNames(x).forEach(k => { if (seen.has(k) || k === 'constructor') return; seen.add(k); const v = o[k]; w[k] = typeof v === 'function' ? v.bind(o) : v; }); x = Object.getPrototypeOf(x); } return w; };
+  const W = bindAll(db), doc0 = path => db.doc(path);
+  W.doc = function (path) {
+    const r = doc0(path); if (!/^articles\/[^/]+$/.test(path)) return r; const aid = path.split('/')[1], R = bindAll(r);
+    const split = o => { const k = {}, rest = {...o}; ['pa', 'paDernier'].forEach(f => { if (f in rest) { if (rest[f] != null) k[f] = rest[f]; delete rest[f]; } }); return [k, rest]; };
+    const wr2 = async k => { if (!Object.keys(k).length) return; COUTS[aid] = {...(COUTS[aid] || {}), ...k}; try { await doc0('couts/' + aid).set({...COUTS[aid]}); } catch (e) {} };
+    R.set = async o => { const [k, rest] = split(o || {}); const x = await r.set(rest); await wr2(k); return x; };
+    R.update = async o => { const [k, rest] = split(o || {}); const x = Object.keys(rest).length ? await r.update(rest) : undefined; await wr2(k); return x; };
+    return R;
+  };
+  W._raw = doc0;
+  return W;
+}
+/* Abonnements selon les droits : couts pour les profils autorisés ; collections réservées si un droit est donné */
+let XSUBS = new Set();
+function extraSubs() {
+  if (!ctx.db || !ctx.ready) return; const want = [];
+  if (ctx.admin || myRoles().some(r => sensOf(r, 'pa'))) want.push(['couts', 'couts']);
+  if (!ctx.admin) { const adm = [['depenses', 'depenses'], ['facfourn', 'facfourn'], ['reglfourn', 'reglfourn'], ['caisse', 'caisse'], ['avoirsfourn', 'avoirsfourn'], ['clotures', 'clotures'], ['contactsadm', 'contactsadm'], ['retoursfourn', 'retoursfourn'], ['rhformations', 'formations'], ['rhrecrut', 'recrut']];
+    const has = c => Object.keys(MODCOLS).some(id => (MODCOLS[id] || []).includes(c) && modLv(id) >= 1); adm.forEach(x => { if (has(x[0])) want.push(x); });
+    if (modLv('rh') >= 1 && myRoles().some(r => sensOf(r, 'salaires'))) ['pointages', 'demandes', 'rh'].forEach(c => { if (!XSUBS.has(c)) { XSUBS.add(c); ctx.db.collection(c).onSnapshot(s => { D[c] = {}; s.docs.forEach(d => { D[c][d.id] = d.data(); }); rq(); }, () => {}); } }); }
+  want.forEach(([c, k]) => { if (XSUBS.has(c)) return; XSUBS.add(c); ctx.db.collection(c).onSnapshot(s => { if (c === 'couts') { COUTS = {}; s.docs.forEach(d => { COUTS[d.id] = d.data(); }); mergeCouts(); } else D[k] = s.docs.map(d => ({id: d.id, ...d.data()})); rq(); }, () => {}); });
+}
+setInterval(() => { try { extraSubs(); } catch (e) {} }, 3000);
+/* Migration unique : les prix d'achat déjà enregistrés dans les articles passent dans « couts » (version en ligne) */
+let CMIG = false;
+async function coutsMig() {
+  if (CMIG || !ctx.admin || !window.CASA_SB || OFF || !D.settings || cfg().coutsMig || !ctx.ready || !(D.articles || []).length) return; CMIG = true;
+  try { let n = 0; for (const a of D.articles) { const raw = {}; if (a.pa != null && !(COUTS[a.id] && COUTS[a.id].pa != null)) raw.pa = a.pa; if (a.paDernier != null && !(COUTS[a.id] && COUTS[a.id].paDernier != null)) raw.paDernier = a.paDernier; if (Object.keys(raw).length) { COUTS[a.id] = {...(COUTS[a.id] || {}), ...raw}; await ctx.db.doc('couts/' + a.id).set({...COUTS[a.id]}); n++; } if (a.pa != null || a.paDernier != null) await ctx.db._raw('articles/' + a.id).update({pa: null, paDernier: null}); }
+    await ctx.db.doc('settings/company').update({coutsMig: 1}); if (n) toast(n + ' prix d\'achat rangés à part (réservés aux profils autorisés)'); } catch (e) { CMIG = false; }
+}
+setInterval(() => { try { coutsMig(); } catch (e) {} }, 7000);
+
 /* ---------- Modules, rendu, navigation ---------- */
 const ALL = ['admin', 'commercial', 'comptoir', 'technicien', 'rh'];
 const MODULES = [
@@ -4485,6 +4581,7 @@ const MODULES = [
   {id: 'rh', label: 'Gestion RH', icon: 'users', roles: ['admin'], render: vRH, badge: pendRH},
   {sep: 'Administration', id: 'services', label: 'Services & tâches', icon: 'sheet', roles: ['admin', 'commercial', 'technicien'], render: vServices},
   {id: 'modeles', label: 'Charges fixes & modèles', icon: 'sheet', roles: ['admin', 'commercial'], render: vModeles},
+  {id: 'droits', label: 'Rôles & droits', icon: 'cog', roles: ['admin'], render: vDroits},
   {id: 'equipe', label: 'Personnel', icon: 'users', roles: ['admin'], render: vPersonnel, badge: () => { const bl = new Set(D.personnel.filter(p => p.statut === 'Sorti' && p.uid).map(p => p.uid)); return Object.keys(D.requests).filter(k => !D.staff[k] && !bl.has(k)).length; }},
   {id: 'contactsadm', label: 'Contacts administratifs', icon: 'phone', roles: ['admin'], render: vContactsAdm},
   {id: 'reprise', label: 'Reprise OpenConcerto', icon: 'upload', roles: ['admin'], render: vReprise},
@@ -4513,7 +4610,7 @@ function render(soft) {
   if (!ctx.ready) return;
   if (!ctx.db) { $('#nav').innerHTML = ''; $('#view').innerHTML = head('Base partagée indisponible', 'Cette vue ne peut pas utiliser la base de données.') + '<div class="banner bad">Ouvrez la page depuis son lien dans Claude, connecté à votre compte.</div>'; return; }
   if (!role) { $('#nav').innerHTML = ''; $('#view').innerHTML = vAccess(); return; }
-  const mods = MODULES.filter(m => m.roles.includes(role));
+  const mods = MODULES.filter(m => modOk(m));
   if (!mods.some(m => m.id === cur)) cur = mods[0].id;
   $('#nav').innerHTML = mods.map(m => { const c = m.badge ? m.badge() : 0; return (m.sep ? `<div class="nav-sep">${m.sep}</div>` : '') + `<button type="button" class="mi ${m.id === cur ? 'on' : ''}" data-a="go" data-go="${m.id}"${m.id === cur ? ' aria-current="page"' : ''}>${ic(m.icon)}<span class="min-w-0 flex-1 truncate">${m.label}</span>${c ? `<span class="nb ${m.id === 'recus' ? 'red' : ''}">${c}</span>` : ''}</button>`; }).join('');
   $('#view').innerHTML = mods.find(m => m.id === cur).render();
@@ -4634,7 +4731,7 @@ render();
 (async () => {
   const to = setTimeout(() => { if (!ctx.ready) $('#view').innerHTML = '<div class="banner bad">La base partagée ne répond pas. Vérifiez la connexion internet puis rechargez la page.</div>'; }, 10000);
   const use = n => (window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
-  ctx.db = await use('db'); ctx.user = await use('user'); ctx.dl = await use('downloads');
+  ctx.db = wrapDb(await use('db')); ctx.user = await use('user'); ctx.dl = await use('downloads');
   if (ctx.user) { ctx.uid = await ctx.user.id(); ctx.admin = await ctx.user.canEdit(); ctx.me = await ctx.user.me(); }
   clearTimeout(to); ctx.ready = true;
   if (ctx.db) startSubs();
