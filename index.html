@@ -646,7 +646,7 @@ function vVente() {
   cartArrClean();
   const t = calc(CART.lignes, 'TC'), tf = calc(CART.lignes, 'FC'), none = !CART.lignes.length;
   const lines = CART.lignes.map(l => l.arr ? `<tr><td class="font-medium" style="color:var(--ok-fg,#15803d)">${esc(l.desig)} (TVA ${l.tva} %)</td><td class="num">${fmt(ttcU(l))}</td><td class="num">1</td><td></td><td class="num font-semibold">${fmt(ttcU(l))}</td><td><div class="acts"><button type="button" class="ib" data-a="arrdel" aria-label="Retirer la remise d'arrondi">${ic('trash')}</button></div></td></tr>` : `<tr><td class="font-medium">${esc(l.desig)}<div class="text-xs" id="lm-${l.id}">${lineMg(l)}</div></td><td class="num">${fmt(ttcU(l))}</td><td><div class="inline-flex items-center gap-1"><button type="button" class="ib" data-a="qty" data-id="${l.id}" data-d="-1" aria-label="Diminuer">${ic('minus')}</button><input class="in qin" type="number" min="0" step="any" value="${l.qte}" data-a="qtyset" data-id="${l.id}" aria-label="Quantité"><button type="button" class="ib" data-a="qty" data-id="${l.id}" data-d="1" aria-label="Augmenter">${ic('plus')}</button></div></td><td><input class="in qin" type="number" min="0" max="100" step="any" value="${l.rem || 0}" data-a="remset" data-id="${l.id}" aria-label="Remise en pourcentage"></td><td class="num font-semibold" id="lt-${l.id}">${fmt(r3(l.qte * ttcU(l)))}</td><td><div class="acts"><button type="button" class="ib" data-a="rmline" data-id="${l.id}" aria-label="Retirer">${ic('trash')}</button></div></td></tr>`).join('') || emptyRow(6, 'Panier vide. Cliquez sur un article du catalogue ou ajoutez une ligne libre.');
-  const cat = D.articles.map(a => { const av = (+a.stock || 0) - pend(a.id), s = normS(a.ref + ' ' + a.nom + ' ' + a.cat); return `<button type="button" class="cat-item fi" data-a="addart" data-id="${a.id}" data-s="${esc(s)}"${CATQ && !normS(CATQ).split(' ').filter(Boolean).every(w => s.includes(w)) ? ' hidden' : ''}><span class="min-w-0"><span class="block font-semibold truncate">${esc(a.nom)}</span><span class="block text-xs text-mute">${esc(a.ref)} · ${fmt(ttcU({pu: a.prixHT, tva: a.tva}))} TTC${a.unite === 'm' ? ' / m' : ''}</span></span>${bd(av <= 0 ? 'Rupture' : av + (a.unite === 'm' ? ' m' : ''), av <= 0 ? 'b-bad' : av <= a.seuil ? 'b-warn' : 'b-ok')}</button>`; }).join('');
+  const cat = D.articles.map(a => { const av = (+a.stock || 0) - pend(a.id), s = normS(artS(a)); return `<button type="button" class="cat-item fi" data-a="addart" data-id="${a.id}" data-s="${esc(s)}"${CATQ && !normS(CATQ).split(' ').filter(Boolean).every(w => s.includes(w)) ? ' hidden' : ''}><span class="min-w-0"><span class="block font-semibold truncate">${esc(a.nom)}</span><span class="block text-xs text-mute">${esc(a.ref)} · ${fmt(ttcU({pu: a.prixHT, tva: a.tva}))} TTC${a.unite === 'm' ? ' / m' : ''}</span></span>${bd(av <= 0 ? 'Rupture' : av + (a.unite === 'm' ? ' m' : ''), av <= 0 ? 'b-bad' : av <= a.seuil ? 'b-warn' : 'b-ok')}</button>`; }).join('');
   const label = OFF ? 'Encaisser (ticket provisoire)' : 'Encaisser (ticket de caisse)';
   return head('Vente comptoir', 'Ticket de caisse pour les clients de passage. La facture globale se crée en fin de mois.', '') + `
   ${OFF ? '<div class="banner">Mode hors ligne simulé : le ticket reçoit un numéro PROV-C et le numéro officiel TC est attribué à la reconnexion.</div>' : ''}
@@ -728,9 +728,9 @@ let STQ = '';
 function vStock() {
   const rows = [...D.articles].sort((a, b) => a.ref.localeCompare(b.ref)).map(a => {
     const st = a.unite === 'm' ? 10 : 1, av = (+a.stock || 0) - pend(a.id), crit = av <= a.seuil;
-    return `<tr class="fi" data-s="${esc(normS(a.ref + ' ' + a.nom + ' ' + a.cat))}"${STQ && !normS(STQ).split(' ').filter(Boolean).every(w => normS(a.ref + ' ' + a.nom + ' ' + a.cat).includes(w)) ? ' hidden' : ''}><td class="font-semibold">${esc(a.ref)}${a.exemple ? ' ' + bd('Exemple', 'b-mute') : ''}</td><td>${esc(a.nom)}${a.reappro === 'Non' ? ' ' + bd('Sans réassort', 'b-mute') : ''}${fournLbl(a) ? `<div class="text-xs text-mute">${esc(fournLbl(a))}</div>` : ''}${canPA() ? `<button type="button" class="lk text-xs" data-a="prixhist" data-id="${a.id}">Historique des prix</button>` : ''}</td><td>${esc(a.cat)}</td>${canPA() ? `<td class="num">${+a.pa > 0 ? fmt(a.pa) : '<span class="text-mute">—</span>'}</td>` : ''}<td class="num">${fmt(a.prixHT)}${canPA() && +a.pa > 0 ? '<div class="text-xs text-mute">marge ' + ((a.prixHT - a.pa) / a.pa * 100).toFixed(0) + ' %</div>' : ''}</td><td class="num">${a.tva} %</td><td><div class="inline-flex items-center gap-2"><button type="button" class="ib" data-a="stk" data-id="${a.id}" data-d="${-st}" aria-label="Retirer">${ic('minus')}</button><span class="inline-block w-14 text-center font-bold tnum">${av}${a.unite === 'm' ? ' m' : ''}</span><button type="button" class="ib" data-a="stk" data-id="${a.id}" data-d="${st}" aria-label="Ajouter">${ic('plus')}</button></div></td><td>${crit ? bd('Critique', 'b-bad') : bd('OK', 'b-ok')}</td><td><div class="acts">${can('admin', 'commercial') ? `<button type="button" class="ib" data-a="editart" data-id="${a.id}" aria-label="Modifier">${ic('edit')}</button>` : ''}${ctx.admin ? `<button type="button" class="ib" data-a="delart" data-id="${a.id}" aria-label="Supprimer">${ic('trash')}</button>` : ''}</div></td></tr>`;
+    return `<tr class="fi" data-s="${esc(normS(artS(a)))}"${STQ && !normS(STQ).split(' ').filter(Boolean).every(w => normS(artS(a)).includes(w)) ? ' hidden' : ''}><td class="font-semibold">${esc(a.ref)}${a.exemple ? ' ' + bd('Exemple', 'b-mute') : ''}</td><td>${esc(a.nom)}${a.reappro === 'Non' ? ' ' + bd('Sans réassort', 'b-mute') : ''}${fournLbl(a) ? `<div class="text-xs text-mute">${esc(fournLbl(a))}</div>` : ''}${canPA() ? `<button type="button" class="lk text-xs" data-a="prixhist" data-id="${a.id}">Historique des prix</button>` : ''}</td><td>${famOk(a) ? esc(a.cat) : bd(FAM_X, 'b-warn')}${a.sfam ? `<div class="text-xs text-mute">${esc(a.sfam)}</div>` : ''}${a.marque ? `<div class="text-xs text-mute">${esc(a.marque)}</div>` : ''}</td>${canPA() ? `<td class="num">${+a.pa > 0 ? fmt(a.pa) : '<span class="text-mute">—</span>'}</td>` : ''}<td class="num">${fmt(a.prixHT)}${canPA() && +a.pa > 0 ? '<div class="text-xs text-mute">marge ' + ((a.prixHT - a.pa) / a.pa * 100).toFixed(0) + ' %</div>' : ''}</td><td class="num">${a.tva} %</td><td><div class="inline-flex items-center gap-2"><button type="button" class="ib" data-a="stk" data-id="${a.id}" data-d="${-st}" aria-label="Retirer">${ic('minus')}</button><span class="inline-block w-14 text-center font-bold tnum">${av}${a.unite === 'm' ? ' m' : ''}</span><button type="button" class="ib" data-a="stk" data-id="${a.id}" data-d="${st}" aria-label="Ajouter">${ic('plus')}</button></div></td><td>${crit ? bd('Critique', 'b-bad') : bd('OK', 'b-ok')}</td><td><div class="acts">${can('admin', 'commercial') ? `<button type="button" class="ib" data-a="editart" data-id="${a.id}" aria-label="Modifier">${ic('edit')}</button>` : ''}${ctx.admin ? `<button type="button" class="ib" data-a="delart" data-id="${a.id}" aria-label="Supprimer">${ic('trash')}</button>` : ''}</div></td></tr>`;
   }).join('') || emptyRow(8, 'Aucun article.');
-  return head('Articles & stock', D.articles.length + ' références. Les prix sont saisis HT, le comptoir les affiche TTC.', `<input id="st-q" class="in" type="search" autocomplete="off" style="width:14rem;max-width:100%" placeholder="Code ou désignation…" aria-label="Rechercher un article" value="${esc(STQ)}">` + (can('admin', 'commercial') ? btn('sonew', 'Casse / perte', 'btn-o') + btn('newart', 'Nouvel article') : '')) + tbl(`<th>Réf.</th><th>Désignation</th><th>Catégorie</th>${canPA() ? '<th class="num">Achat HT</th>' : ''}<th class="num">Vente HT</th><th class="num">TVA</th><th>Stock</th><th>État</th><th></th>`, rows, 820);
+  return head('Articles & stock', D.articles.length + ' références. Les prix sont saisis HT, le comptoir les affiche TTC.', `<input id="st-q" class="in" type="search" autocomplete="off" style="width:14rem;max-width:100%" placeholder="Code ou désignation…" aria-label="Rechercher un article" value="${esc(STQ)}">` + (can('admin', 'commercial') ? btn('sonew', 'Casse / perte', 'btn-o') + btn('newart', 'Nouvel article') : '')) + tbl(`<th>Réf.</th><th>Désignation</th><th>Famille</th>${canPA() ? '<th class="num">Achat HT</th>' : ''}<th class="num">Vente HT</th><th class="num">TVA</th><th>Stock</th><th>État</th><th></th>`, rows, 820);
 }
 async function adjStock(id, d) {
   if (!needOn()) return;
@@ -778,7 +778,7 @@ async function saveParams() {
 /* ---------- Formulaires génériques (une seule modale) ---------- */
 const tvaOpts = () => { const S = cfg(); return [...new Set([+S.tva1, +S.tva2, 0])].map(x => [x, x + ' %']); };
 const FORMS = {
-  article: {n: 'Nouvel article', e: "Modifier l'article", f: [{k: 'ref', l: 'Référence', req: 1}, {k: 'cat', l: 'Catégorie', req: 1}, {k: 'nom', l: 'Désignation', req: 1, w: 1}, {k: 'pa', l: "Prix d'achat HT (DT)", t: 'number', d: 0}, {k: 'mg', l: "Marge sur prix d'achat (%)", t: 'number', d: ''}, {k: 'prixHT', l: 'Prix de vente HT (DT)', t: 'number', req: 1}, {k: 'tva', l: 'TVA', t: 'select', o: tvaOpts, d: () => cfg().tva1}, {k: 'unite', l: 'Vendu au', t: 'select', o: [['pcs', 'Pièce'], ['m', 'Mètre']], d: 'pcs'}, {k: 'stock', l: 'Stock', t: 'number', d: 0}, {k: 'emplacement', l: 'Emplacement (rayon, étagère, dépôt…)'}, {k: 'seuil', l: 'Stock minimal (seuil)', t: 'number', d: 5}, {k: 'stockMax', l: 'Stock cible après réassort (0 = seuil)', t: 'number', d: 0}, {k: 'fournId', l: 'Fournisseur principal', t: 'select', o: () => [['', '— Aucun —'], ...D.fournisseurs.slice().sort((a, b) => a.nom.localeCompare(b.nom)).map(f => [f.id, f.nom])], d: ''}, {k: 'fournId2', l: 'Fournisseur secondaire', t: 'select', o: () => [['', '— Aucun —'], ...D.fournisseurs.slice().sort((a, b) => a.nom.localeCompare(b.nom)).map(f => [f.id, f.nom])], d: ''}, {k: 'reappro', l: 'Réapprovisionnement automatique', t: 'select', o: [['Oui', 'Oui : ajouté au bon de commande sous le seuil'], ['Non', 'Non']], d: 'Oui'}]},
+  article: {n: 'Nouvel article', e: "Modifier l'article", f: [{k: 'ref', l: 'Référence', req: 1}, {k: 'marque', l: 'Marque'}, {k: 'nom', l: 'Désignation', req: 1, w: 1}, {k: 'cat', l: 'Famille', t: 'select', o: () => famOpts(), d: ''}, {k: 'sfam', l: 'Sous-famille', t: 'select', o: [['', '—']], d: ''}, {k: 'pa', l: "Prix d'achat HT (DT)", t: 'number', d: 0}, {k: 'mg', l: "Marge sur prix d'achat (%)", t: 'number', d: ''}, {k: 'prixHT', l: 'Prix de vente HT (DT)', t: 'number', req: 1}, {k: 'tva', l: 'TVA', t: 'select', o: tvaOpts, d: () => cfg().tva1}, {k: 'unite', l: 'Vendu au', t: 'select', o: [['pcs', 'Pièce'], ['m', 'Mètre']], d: 'pcs'}, {k: 'stock', l: 'Stock', t: 'number', d: 0}, {k: 'emplacement', l: 'Emplacement (rayon, étagère, dépôt…)'}, {k: 'seuil', l: 'Stock minimal (seuil)', t: 'number', d: 5}, {k: 'stockMax', l: 'Stock cible après réassort (0 = seuil)', t: 'number', d: 0}, {k: 'fournId', l: 'Fournisseur principal', t: 'select', o: () => [['', '— Aucun —'], ...D.fournisseurs.slice().sort((a, b) => a.nom.localeCompare(b.nom)).map(f => [f.id, f.nom])], d: ''}, {k: 'fournId2', l: 'Fournisseur secondaire', t: 'select', o: () => [['', '— Aucun —'], ...D.fournisseurs.slice().sort((a, b) => a.nom.localeCompare(b.nom)).map(f => [f.id, f.nom])], d: ''}, {k: 'reappro', l: 'Réapprovisionnement automatique', t: 'select', o: [['Oui', 'Oui : ajouté au bon de commande sous le seuil'], ['Non', 'Non']], d: 'Oui'}]},
   recu: {n: 'Nouveau reçu', f: [{k: 'client', l: 'Client', req: 1}, {k: 'date', l: 'Date', t: 'date', d: () => ds()}, {k: 'intervention', l: 'Intervention / chantier', req: 1, w: 1}, {k: 'montant', l: 'Montant encaissé (DT)', t: 'number', req: 1}, {k: 'mode', l: 'Mode de paiement', t: 'select', o: ['Espèces', 'Chèque', 'Virement'], d: 'Espèces'}, {k: 'dossier', l: 'Dossier / chantier (facultatif)', t: 'select', o: () => dosList(), d: '', w: 1}, {k: 'note', l: 'Note', w: 1}]},
   libre: {n: 'Ligne libre', f: [{k: 'desig', l: 'Désignation', req: 1, w: 1}, {k: 'pu', l: 'Prix unitaire HT (DT)', t: 'number', req: 1}, {k: 'tva', l: 'TVA', t: 'select', o: tvaOpts, d: () => cfg().tva1}, {k: 'qte', l: 'Quantité', t: 'number', d: 1, req: 1}]}
 };
@@ -795,7 +795,7 @@ function openForm(type, item) {
   const F = FORMS[type];
   if (type === 'article' && item) item = {...item, mg: +item.pa > 0 ? Math.round((item.prixHT - item.pa) / item.pa * 10000) / 100 : ''};
   showModal(item ? F.e : F.n, `<form id="mf" data-form="${type}" data-id="${item ? item.id : ''}" class="grid grid-cols-1 sm:grid-cols-2 gap-3">${F.f.map(f => fld(f, item ? item[f.k] : dv(f)) + (type === 'article' && f.k === 'prixHT' ? '<div id="ttc-info" class="ttc-info" aria-live="polite"></div>' : '')).join('')}<div class="sm:col-span-2 flex justify-end gap-2 pt-2"><button type="button" class="btn btn-o" data-a="close">Annuler</button><button type="submit" class="btn btn-p">Enregistrer</button></div></form>`);
-  if (type === 'article') ttcInfo();
+  if (type === 'article') { ttcInfo(); famFormInit(item); }
 }
 async function submitForm(f) {
   const type = f.dataset.form, id = f.dataset.id, F = FORMS[type], v = {};
@@ -807,6 +807,7 @@ async function submitForm(f) {
       if (OFF) { const prov = enqueue('recu', v); toast('Reçu enregistré hors ligne : ' + prov); } else { const r = await createRecu({...v, opId: uid() + uid()}); ensureClient({nom: v.client}); closeModal(); render(); doneDoc({...r.doc, id: r.id}); return; }
     } else if (type === 'article') {
       if (!needOn()) return;
+      if (!v.cat) return toast('Choisissez la famille de l\'article.', true);
       delete v.mg; const pv0 = v.prixHT; v.prixHT = pvArrondi(v.prixHT, v.tva); if (v.prixHT !== r3(pv0)) toast('Prix arrondi : ' + fmt(pvTTC(v.prixHT, v.tva)) + ' TTC (' + fmt(v.prixHT) + ' HT)');
       if (id) { const o = byId(D.articles, id) || {}; await ctx.db.doc('articles/' + id).update(v); await prixLog(id, o, v, 'Modification manuelle'); } else { const nid = uid(); await ctx.db.doc('articles/' + nid).set({...v}); await prixLog(nid, {}, v, 'Création'); }
     } else if (type === 'client') {
@@ -1052,7 +1053,7 @@ document.addEventListener('input', e => {
   const t = e.target;
   if (t.id === 'ed-q' && ED) {
     const q = t.value.trim(), box = $('#ed-res'); if (!box) return;
-    const L = q ? D.articles.filter(a => matchQ(q, normS(a.ref + ' ' + a.nom + ' ' + a.cat))).slice(0, 8) : [];
+    const L = q ? D.articles.filter(a => matchQ(q, normS(artS(a)))).slice(0, 8) : [];
     box.innerHTML = q ? (L.map(a => `<button type="button" class="cat-item" style="width:100%;margin-bottom:.25rem" data-a="edart" data-id="${a.id}"><span class="min-w-0"><span class="block font-semibold truncate">${esc(a.nom)}</span><span class="block text-xs text-mute">${esc(a.ref)} · ${fmt(a.prixHT)} HT${a.unite === 'm' ? ' / m' : ''}</span></span></button>`).join('') || '<div class="hint">Aucun article trouvé.</div>') : '';
   } else if (t.id === 'cat-q') {
     CATQ = t.value; $$('.cat-item[data-s]').forEach(b => { b.hidden = !!CATQ.trim() && !matchQ(CATQ, b.dataset.s); });
@@ -1094,7 +1095,7 @@ document.addEventListener('change', e => { if (e.target.id === 'f-tva' && e.targ
 /* ================= 2A : Import / Export Excel (SheetJS) ================= */
 const IO = {type: 'articles', from: '', to: '', parsed: null, file: ''};
 const IOT = {
-  articles: {label: 'Articles', cols: ['reference', 'designation', 'categorie', 'prix_ht', 'prix_achat_ht', 'tva', 'unite', 'stock', 'seuil', 'emplacement'], ex: ['CAB-2X1.5', 'Câble 2x1.5 mm²', 'Câblage', 12.5, 9.8, 19, 'm', 100, 20, 'Rayon A2']},
+  articles: {label: 'Articles', cols: ['reference', 'designation', 'categorie', 'sous_famille', 'marque', 'prix_ht', 'prix_achat_ht', 'tva', 'unite', 'stock', 'seuil', 'emplacement'], ex: ['CAB-2X1.5', 'Câble 2x1.5 mm²', 'Câbles & fils', 'Câbles U1000 R2V / RO2V', 'Mondial', 12.5, 9.8, 19, 'm', 100, 20, 'Rayon A2']},
   clients: {label: 'Clients', cols: ['nom', 'matricule_fiscal', 'telephone', 'adresse', 'email'], ex: ['Société Exemple SARL', '1234567/A/M/000', '71 000 000', 'Tunis', 'contact@exemple.tn']},
   fournisseurs: {label: 'Fournisseurs', cols: ['nom', 'matricule_fiscal', 'telephone', 'email', 'contact', 'adresse', 'delai_paiement_jours'], ex: ['Sotel Électrique SARL', '7654321/B/M/000', '71 111 111', 'achats@sotel.tn', 'M. Karim', 'Ben Arous', 30]},
   dossiers: {label: 'Dossiers', cols: ['numero', 'client', 'lieu', 'description', 'statut'], ex: ['', 'Société Exemple SARL', 'Sousse', 'Installation électrique atelier', 'Ouvert']}
@@ -1116,7 +1117,7 @@ function ioExport() {
   add('Tickets', srt(D.tickets).filter(x => inPer(x.date)).map(x => ({numero: x.numero, date: x.date, total_ttc: x.totals ? x.totals.ttc : '', statut: x.statut, facture: x.factureNumero || ''})), ['numero', 'date', 'total_ttc', 'statut', 'facture']);
   add('Devis', srt(D.devis).filter(x => inPer(x.date)).map(piece), pc);
   add('Recus', srt(D.recus).filter(x => inPer(x.date)).map(x => ({numero: x.numero, date: x.date, dossier: x.dossier || '', client: (x.client || {}).nom || '', intervention: x.intervention, montant: x.montant, mode: x.mode, statut: x.statut, facture: x.factureNumero || ''})), ['numero', 'date', 'dossier', 'client', 'intervention', 'montant', 'mode', 'statut', 'facture']);
-  add('Articles', [...D.articles].sort((a, b) => a.ref.localeCompare(b.ref)).map(a => ({reference: a.ref, designation: a.nom, categorie: a.cat, prix_ht: a.prixHT, prix_achat_ht: a.pa || 0, tva: a.tva, unite: a.unite, stock: a.stock, seuil: a.seuil, emplacement: a.emplacement || ''})), IOT.articles.cols);
+  add('Articles', [...D.articles].sort((a, b) => a.ref.localeCompare(b.ref)).map(a => ({reference: a.ref, designation: a.nom, categorie: a.cat, sous_famille: a.sfam || '', marque: a.marque || '', prix_ht: a.prixHT, prix_achat_ht: a.pa || 0, tva: a.tva, unite: a.unite, stock: a.stock, seuil: a.seuil, emplacement: a.emplacement || ''})), IOT.articles.cols);
   add('Dossiers', srt(D.dossiers).filter(x => inPer(x.date)).map(x => ({numero: x.numero, client: (x.client || {}).nom || '', lieu: x.lieu || '', description: x.desc || '', statut: x.statut, date: x.date})), ['numero', 'client', 'lieu', 'description', 'statut', 'date']);
   add('Commandes', srt(D.commandes).filter(x => inPer(x.date)).map(x => ({numero: x.numero, date: x.date, categorie: x.categorie, fournisseur: (x.fournisseur || {}).nom || '', dossier: x.dossier || '', total_ht: x.totals.ht, total_ttc: x.totals.ttc, statut: x.statut})), ['numero', 'date', 'categorie', 'fournisseur', 'dossier', 'total_ht', 'total_ttc', 'statut']);
   add('Interventions', [...D.interventions].sort((a, b) => a.date.localeCompare(b.date)).filter(x => inPer(x.date)).map(x => ({date: x.date, heure: x.heure || '', type: x.type, titre: x.titre, dossier: x.dossier || '', client: x.client || '', lieu: x.lieu || '', techniciens: ivTech(x), statut: x.statut})), ['date', 'heure', 'type', 'titre', 'dossier', 'client', 'lieu', 'techniciens', 'statut']);
@@ -1157,7 +1158,8 @@ function ioValidate(raw) {
       if (!ref) e.push('référence manquante'); if (!nom) e.push('désignation manquante'); if (pu === null || pu < 0) e.push('prix HT invalide'); if (!tvas.includes(tva)) e.push('TVA doit être ' + tvas.join(' ou '));
       const st = r.stock === '' ? 0 : num(r.stock), se = r.seuil === '' ? 5 : num(r.seuil); if (st === null || se === null) e.push('stock/seuil invalide');
       if (ref && seenA.has(ref.toLowerCase())) dup = true; else if (ref) seenA.add(ref.toLowerCase());
-      d = {ref, nom, cat: String(r.categorie || 'Divers').trim() || 'Divers', prixHT: pvArrondi(pu, tva), pa: r.prix_achat_ht === '' || r.prix_achat_ht === undefined ? 0 : (num(r.prix_achat_ht) || 0), tva, unite: un, stock: st, seuil: se, ...(String(r.emplacement || '').trim() ? {emplacement: String(r.emplacement).trim()} : {})};
+      d = {ref, nom, cat: String(r.categorie || '').trim(), sfam: String(r.sous_famille || '').trim(), marque: String(r.marque || '').trim(), prixHT: pvArrondi(pu, tva), pa: r.prix_achat_ht === '' || r.prix_achat_ht === undefined ? 0 : (num(r.prix_achat_ht) || 0), tva, unite: un, stock: st, seuil: se, ...(String(r.emplacement || '').trim() ? {emplacement: String(r.emplacement).trim()} : {})};
+      Object.assign(d, famAuto(d)); ['sfam', 'marque', 'catOC'].forEach(k => { if (!d[k]) delete d[k]; });
     } else if (t === 'clients') {
       const nom = String(r.nom || '').trim(); if (!nom) e.push('nom manquant');
       if (nom && seenC.has(nom.toLowerCase())) dup = true; else if (nom) seenC.add(nom.toLowerCase());
@@ -1517,7 +1519,7 @@ document.addEventListener('input', e => {
   else if (d.cel && CE) { const l = CE.lignes[+d.i]; if (l) { l[d.cel] = d.cel === 'desig' ? t.value : d.cel === 'tva' ? +t.value : (parseFloat(String(t.value).replace(',', '.')) || 0); ceTot(); } }
   else if (t.id === 'ce-q' && CE) {
     const q = t.value.trim(), box = $('#ce-res'); if (!box) return;
-    const L = q ? D.articles.filter(a => matchQ(q, normS(a.ref + ' ' + a.nom + ' ' + a.cat))).slice(0, 8) : [];
+    const L = q ? D.articles.filter(a => matchQ(q, normS(artS(a)))).slice(0, 8) : [];
     box.innerHTML = q ? (L.map(a => `<button type="button" class="cat-item" style="width:100%;margin-bottom:.25rem" data-a="cmdart" data-id="${a.id}"><span class="min-w-0"><span class="block font-semibold truncate">${esc(a.nom)}</span><span class="block text-xs text-mute">${esc(a.ref)}${+a.pa > 0 ? ' · achat ' + fmt(a.pa) : ''}</span></span></button>`).join('') || '<div class="hint">Aucun article trouvé.</div>') : '';
   } else if (t.id === 'pl-tech') { FILT.tech = t.value; clearTimeout(window.__plt); window.__plt = setTimeout(() => { if ($('#pl-tech') === document.activeElement) { const v = t.value; render(); const n = $('#pl-tech'); if (n) { n.focus(); n.setSelectionRange(v.length, v.length); } } }, 350); }
 });
@@ -3616,11 +3618,11 @@ function vRentab() {
 }
 
 /* ---------- 6. Analyse des ventes ---------- */
-const GRP = [['mois', 'Mois'], ['decade', 'Décade (1-10, 11-20, 21-fin)'], ['activite', 'Activité'], ['commercial', 'Commercial / vendeur'], ['famille', 'Famille d\'article'], ['fournisseur', 'Fournisseur'], ['article', 'Article'], ['client', 'Client']];
+const GRP = [['mois', 'Mois'], ['decade', 'Décade (1-10, 11-20, 21-fin)'], ['activite', 'Activité'], ['commercial', 'Commercial / vendeur'], ['famille', 'Famille d\'article'], ['sousfamille', 'Sous-famille d\'article'], ['marque', 'Marque'], ['fournisseur', 'Fournisseur'], ['article', 'Article'], ['client', 'Client']];
 const MES = [['ht', 'Chiffre d\'affaires HT'], ['marge', 'Marge brute'], ['qte', 'Quantités'], ['nb', 'Nombre de ventes']];
 function grpKey(r, g) {
   const a = r.aid ? byId(D.articles, r.aid) : null, dd2 = +(r.date || '').slice(8, 10);
-  return g === 'mois' ? (r.date || '').slice(0, 7) : g === 'decade' ? (r.date || '').slice(0, 7) + ' · ' + (dd2 <= 10 ? '1re décade' : dd2 <= 20 ? '2e décade' : '3e décade') : g === 'activite' ? r.act : g === 'commercial' ? nameOf(r.by) : g === 'famille' ? (a ? artFam(a) : 'Lignes libres (main-d\'œuvre…)') : g === 'fournisseur' ? (a ? artFourn(a) : 'Lignes libres') : g === 'article' ? (a ? a.nom : r.desig) : (r.client || 'Client de passage');
+  return g === 'mois' ? (r.date || '').slice(0, 7) : g === 'decade' ? (r.date || '').slice(0, 7) + ' · ' + (dd2 <= 10 ? '1re décade' : dd2 <= 20 ? '2e décade' : '3e décade') : g === 'activite' ? r.act : g === 'commercial' ? nameOf(r.by) : g === 'famille' ? (a ? artFam(a) : 'Lignes libres (main-d\'œuvre…)') : g === 'sousfamille' ? (a ? artFam(a) + ' › ' + (a.sfam || 'sans sous-famille') : 'Lignes libres (main-d\'œuvre…)') : g === 'marque' ? (a ? a.marque || 'Sans marque' : 'Lignes libres') : g === 'fournisseur' ? (a ? artFourn(a) : 'Lignes libres') : g === 'article' ? (a ? a.nom : r.desig) : (r.client || 'Client de passage');
 }
 function anaAgg(L, g, m) {
   const M = {}, docs = {};
@@ -3671,7 +3673,7 @@ document.addEventListener('click', e => {
     case 'anper': FILT.anDu = b.dataset.du; FILT.anAu = b.dataset.au; render(); break;
     case 'anxls': { const du = FILT.anDu || new Date().getFullYear() + '-01-01', au = FILT.anAu || ds(), L = saleLines(d => d >= du && d <= au); const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(L.map(r => { const ar = r.aid ? byId(D.articles, r.aid) : null; return {date: r.date, piece: r.d.numero, activite: r.act, commercial: nameOf(r.by), client: r.client, famille: ar ? artFam(ar) : '', fournisseur: ar ? artFourn(ar) : '', article: r.desig, quantite: r.qte, ca_ht: r.ht, cout: r.cout, marge: r3(r.ht - r.cout)}; })), 'Ventes'); saveXlsx(wb, 'analyse-ventes-' + du + '-' + au + '.xlsx'); break; }
-    case 'esxls': { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(D.articles.map(x => ({code: x.ref || '', article: x.nom, famille: artFam(x), fournisseur: artFourn(x), stock: +x.stock || 0, seuil: +x.seuil || 0, cout_moyen: +x.pa || 0, valeur: r3(Math.max(0, +x.stock || 0) * (+x.pa || 0)), qte_vendue_periode: r3((ES_LAST.qv || {})[x.id] || 0), ca_ht_periode: r3((ES_LAST.cav || {})[x.id] || 0), derniere_vente: (ES_LAST.lastSale || {})[x.id] || '', statut: ((ES_LAST.qv || {})[x.id] || 0) > 0 ? 'Actif' : (+x.stock || 0) > 0 ? 'Dormant' : ''})).sort((a, b) => b.qte_vendue_periode - a.qte_vendue_periode)), 'Stock'); saveXlsx(wb, 'etat-stock-' + ds() + '.xlsx'); break; }
+    case 'esxls': { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(D.articles.map(x => ({code: x.ref || '', article: x.nom, famille: artFam(x), sous_famille: x.sfam || '', marque: x.marque || '', fournisseur: artFourn(x), stock: +x.stock || 0, seuil: +x.seuil || 0, cout_moyen: +x.pa || 0, valeur: r3(Math.max(0, +x.stock || 0) * (+x.pa || 0)), qte_vendue_periode: r3((ES_LAST.qv || {})[x.id] || 0), ca_ht_periode: r3((ES_LAST.cav || {})[x.id] || 0), derniere_vente: (ES_LAST.lastSale || {})[x.id] || '', statut: ((ES_LAST.qv || {})[x.id] || 0) > 0 ? 'Actif' : (+x.stock || 0) > 0 ? 'Dormant' : ''})).sort((a, b) => b.qte_vendue_periode - a.qte_vendue_periode)), 'Stock'); saveXlsx(wb, 'etat-stock-' + ds() + '.xlsx'); break; }
   }
 });
 
@@ -3696,7 +3698,7 @@ async function repRun() {
   const R = await repLoad(); if (!R) return toast('Fichier de reprise introuvable.', true);
   const jobs = [...R.fournisseurs.map(x => ['fournisseurs', x]), ...R.articles.map(x => ['articles', x]), ...R.clients.map(x => ['clients', x]), ...R.historique.map(x => ['historique', x])];
   REPRUN = {done: 0, total: jobs.length}; render();
-  let i = 0, err = 0; const worker = async () => { while (i < jobs.length) { const [c, x] = jobs[i++]; const {id, ...d} = x; try { await ctx.db.doc(c + '/' + id).set(d); } catch (e) { err++; } REPRUN.done++; if (REPRUN.done % 50 === 0) render(); } };
+  let i = 0, err = 0; const worker = async () => { while (i < jobs.length) { const [c, x] = jobs[i++]; const {id, ...d} = x; if (c === 'articles') { const ex = byId(D.articles, id); if (ex && famOk(ex)) Object.assign(d, {cat: ex.cat, sfam: ex.sfam || '', marque: ex.marque || d.marque || ''}); else Object.assign(d, famAuto(d)); } try { await ctx.db.doc(c + '/' + id).set(d); } catch (e) { err++; } REPRUN.done++; if (REPRUN.done % 50 === 0) render(); } };
   await Promise.all([worker(), worker(), worker(), worker()]);
   REPRUN = null; render(); toast('Import terminé : ' + (jobs.length - err) + ' fiches' + (err ? ', ' + err + ' erreur(s)' : ''), !!err);
 }
@@ -4324,6 +4326,217 @@ document.addEventListener('click', e => {
   else if (a === 'svadd') { const s = byId(D.services, id); if (s && ED) { ED.lignes.push({id: uid(), aid: null, desig: s.nom + (s.unite ? ' (' + s.unite + ')' : ''), qte: 1, pu: +s.prixHT, tva: +s.tva || 19, mo: true, sid: s.id}); closeModal(); drawEditor(); toast('Ajouté : ' + s.nom); } }
 });
 
+/* ---------- Familles d'articles sur deux niveaux + marque (remarque 37) ---------- */
+const FAMDEF = [
+  ['Câbles & fils', ['Fils H07V', 'Câbles U1000 R2V / RO2V', 'Câbles souples', 'Câbles réseau, TV & alarme', 'Câbles alu & torsadés']],
+  ['Conduits & cheminement', ['Gaines ICTA', 'Tubes IRL & accessoires', 'Goulottes & moulures', 'Chemins de câbles', 'Colliers & fixations']],
+  ['Boîtes & coffrets', ['Boîtes d\'encastrement', 'Boîtes de dérivation & étanches', 'Coffrets modulaires', 'Armoires & plastrons', 'Rails & accessoires']],
+  ['Protection & tableau', ['Disjoncteurs', 'Différentiels', 'Disjoncteurs moteur', 'Parafoudres', 'Contacteurs & relais', 'Horloges & minuteries', 'Fusibles & sectionneurs', 'Répartiteurs & peignes']],
+  ['Appareillage mural', ['Interrupteurs & poussoirs', 'Prises', 'Plaques', 'Supports & montures', 'Obturateurs & accessoires', 'Appareillage étanche']],
+  ['Éclairage', ['Lampes', 'Spots', 'Plafonniers & réglettes', 'Projecteurs', 'Luminaires décoratifs', 'Éclairage extérieur', 'Rubans LED & drivers']],
+  ['Sécurité électronique', ['Alarme intrusion', 'Vidéosurveillance', 'Contrôle d\'accès', 'Détection incendie & gaz']],
+  ['Interphonie', ['Interphones', 'Visiophones', 'Accessoires interphonie']],
+  ['Motorisation', ['Portails', 'Portes & rideaux', 'Volets roulants', 'Télécommandes & accessoires']],
+  ['Domotique', ['Modules connectés', 'Thermostats & capteurs']],
+  ['Réseau, TV & satellite', ['Réseau informatique', 'Baies & accessoires', 'TV & satellite']],
+  ['Énergie', ['Alimentations', 'Batteries', 'Onduleurs & stabilisateurs', 'Solaire', 'Groupes & inverseurs']],
+  ['Raccordement', ['Fiches', 'Multiprises & prolongateurs', 'Dominos & connecteurs', 'Cosses', 'Gaine thermorétractable']],
+  ['Mise à la terre', ['Piquets & barrettes', 'Câble de terre']],
+  ['Chauffage & ventilation', ['Ventilateurs & extracteurs', 'Chauffe-eau & radiateurs']],
+  ['Outillage & consommables', ['Outils', 'Testeurs & mesure', 'Rubans isolants & adhésifs', 'Consommables']]
+];
+const FAM_X = 'À classer';
+const famTree = () => { const t = cfg().familles; return Array.isArray(t) && t.length ? t : FAMDEF.map(([nom, sous]) => ({nom, sous: [...sous]})); };
+const famNoms = () => famTree().map(f => f.nom);
+const famSous = n => (famTree().find(f => f.nom === n) || {}).sous || [];
+const famOk = a => !!a && famNoms().includes(a.cat);
+const artS = a => [a.ref, a.nom, a.cat, a.sfam, a.marque].filter(Boolean).join(' ');
+const famLbl = a => (a.cat || '') + (a.sfam ? ' › ' + a.sfam : '');
+/* Règles de classement : [expression, famille, sous-famille]. La première règle qui correspond l'emporte. */
+const FAMKW = [
+  [/\bcable (tv|coaxial|coax|reseau|resau|hdmi|alarme|telephone|tel|ftp|utp)\b|\bcat ?[56]|\bpatch|\b\d+ ?p ?\* ?0[.,]\d/, 'Câbles & fils', 'Câbles réseau, TV & alarme'],
+  [/\b(videophone|video phone|visiophone)\b/, 'Interphonie', 'Visiophones'],
+  [/\b(interphone|portier)\b/, 'Interphonie', 'Interphones'],
+  [/\b(camera|cam|camer|dvr|nvr|xvr|dome|bullet|turret|hikvision|hilook|dahua|dhahua|ezviz|imou|unv)\b/, 'Sécurité électronique', 'Vidéosurveillance'],
+  [/\b(fumee|detecteur de gaz|detecteur gaz|gaz lpg|incendie|declencheur manuel|sprinkler)\b/, 'Sécurité électronique', 'Détection incendie & gaz'],
+  [/controle d.?acces|\b(digicode|rfid|badge|ventouse|em lock|gache|pointeuse|ronde|zkteco|lecteur de carte|bouton de sortie)\b/, 'Sécurité électronique', 'Contrôle d\'accès'],
+  [/\b(alarme|centrale|detecteur|mvt|mouvement|sirene|clavier|contact magnetique|ksenia|satel|ajax|perfecta|paradox|gsm|autoprotection|infra|pir|capteur multifonction)\b|carte d.?exten|module d.?exten|\bextension\b/, 'Sécurité électronique', 'Alarme intrusion'],
+  [/\b(domotique|connecte|smart|zigbee|tuya|sonoff)\b/, 'Domotique', 'Modules connectés'],
+  [/\b(thermostat)\b/, 'Domotique', 'Thermostats & capteurs'],
+  [/\b(rack|baie de brassage|baie|panneau de brassage|pdu)\b/, 'Réseau, TV & satellite', 'Baies & accessoires'],
+  [/\b(rj45|switch|poe|routeur|router|wifi|wi fi|point d.?acces|lan|sfp|port|ubiquiti|mikrotik|tp link|tplink)\b/, 'Réseau, TV & satellite', 'Réseau informatique'],
+  [/\b(parabole|para|lnb|multiswitch|antenne|demodulateur|recepteur satellite|repartiteur tv)\b/, 'Réseau, TV & satellite', 'TV & satellite'],
+  [/\bchemin de cable|\bdalle marine\b/, 'Conduits & cheminement', 'Chemins de câbles'],
+  [/\b(gaine therm|thermoretract|gaine thermo)/, 'Raccordement', 'Gaine thermorétractable'],
+  [/\b(piquet|barrette de terre|barrette|cuivre nu|cable de terre)\b|\bmise a la terre\b/, 'Mise à la terre', 'Piquets & barrettes'],
+  [/\b(disj|disjoncteur)\b.*\bmoteur\b|\bns ?2\b/, 'Protection & tableau', 'Disjoncteurs moteur'],
+  [/\b(diff|differentiel|interrupteur diff|inter diff|id)\b|\d+ ?ma\b/, 'Protection & tableau', 'Différentiels'],
+  [/\b(disj|disjoncteur|dpn|mcb)\b/, 'Protection & tableau', 'Disjoncteurs'],
+  [/\b(parafoudre)\b/, 'Protection & tableau', 'Parafoudres'],
+  [/\b(contacteur|relais|telerupteur|bloc de contact|contact auxiliaire|contacts auxiliaires)\b/, 'Protection & tableau', 'Contacteurs & relais'],
+  [/\b(horloge|minuterie|interrupteur horaire|programmateur|crepusculaire|delesteur)\b/, 'Protection & tableau', 'Horloges & minuteries'],
+  [/\b(fusible|sectionneur|porte fusible|cartouche)\b/, 'Protection & tableau', 'Fusibles & sectionneurs'],
+  [/\b(repartiteur|peigne|bornier)\b/, 'Protection & tableau', 'Répartiteurs & peignes'],
+  [/\b(moteur coulissant|motorisation|portail|kit moteur|photocellule|cremaillere|porte radar|barriere|blizzard|bft|faac)\b/, 'Motorisation', 'Portails'],
+  [/\b(volet roulant|moteur volet|moteur tubulaire)\b/, 'Motorisation', 'Volets roulants'],
+  [/\b(rideau metallique|porte automatique|porte de garage)\b/, 'Motorisation', 'Portes & rideaux'],
+  [/\b(projecteur)\b/, 'Éclairage', 'Projecteurs'],
+  [/\b(spot|downlight|encastre led)\b/, 'Éclairage', 'Spots'],
+  [/\b(ruban|strip|driver|bande led)\b/, 'Éclairage', 'Rubans LED & drivers'],
+  [/\b(plafonnier|reglette|tube led|neon|panel|dalle led|hublot)\b/, 'Éclairage', 'Plafonniers & réglettes'],
+  [/\b(applique|appique|lustre|suspension|lampadaire)\b/, 'Éclairage', 'Luminaires décoratifs'],
+  [/\b(lanterne|borne lumineuse|potelet|eclairage exterieur|lampe solaire)\b/, 'Éclairage', 'Éclairage extérieur'],
+  [/\b(lampe|ampoule|e27|e14|gu10|g9|flamme|led)\b/, 'Éclairage', 'Lampes'],
+  [/\b(onduleur|ups|stabilisateur|regulateur de tension)\b/, 'Énergie', 'Onduleurs & stabilisateurs'],
+  [/\b(batterie|accumulateur)\b/, 'Énergie', 'Batteries'],
+  [/\b(alimentation|alim|transformateur|transfo|chargeur)\b/, 'Énergie', 'Alimentations'],
+  [/\b(panneau solaire|solaire|photovoltaique|regulateur solaire)\b/, 'Énergie', 'Solaire'],
+  [/\b(groupe electrogene|inverseur de source)\b/, 'Énergie', 'Groupes & inverseurs'],
+  [/\b(fiche|male|femelle|fem)\b/, 'Raccordement', 'Fiches'],
+  [/\b(multiprise|bloc|prolongateur|rallonge|enrouleur|adaptateur)\b/, 'Raccordement', 'Multiprises & prolongateurs'],
+  [/\b(domino|wago|connecteur|borne de connexion|douille|serre fil)\b/, 'Raccordement', 'Dominos & connecteurs'],
+  [/\b(cosse|manchon a sertir)\b/, 'Raccordement', 'Cosses'],
+  [/\b(armoire|plastron)\b/, 'Boîtes & coffrets', 'Armoires & plastrons'],
+  [/\b(coffret|cof|tableau)\b/, 'Boîtes & coffrets', 'Coffrets modulaires'],
+  [/\b(rail|omega)\b/, 'Boîtes & coffrets', 'Rails & accessoires'],
+  [/\b(boite|boitier)\b.*\b(encastrement|encastre|placo|cloison)\b|\b(encastrement|placo)\b/, 'Boîtes & coffrets', 'Boîtes d\'encastrement'],
+  [/\b(boite|boitier|derivation)\b/, 'Boîtes & coffrets', 'Boîtes de dérivation & étanches'],
+  [/\b(gaine|icta)\b/, 'Conduits & cheminement', 'Gaines ICTA'],
+  [/\b(tube|irl|coude|manchon|raccord)\b/, 'Conduits & cheminement', 'Tubes IRL & accessoires'],
+  [/\b(goulotte|moulure|plinthe)\b/, 'Conduits & cheminement', 'Goulottes & moulures'],
+  [/\b(collier|clips|cavalier|crochet)\b/, 'Conduits & cheminement', 'Colliers & fixations'],
+  [/\b(plaque|enjoliveur|cadre)\b/, 'Appareillage mural', 'Plaques'],
+  [/\b(monture|support)\b/, 'Appareillage mural', 'Supports & montures'],
+  [/\b(demi bouche|obturateur|bouche)\b/, 'Appareillage mural', 'Obturateurs & accessoires'],
+  [/\b(prise|prises)\b/, 'Appareillage mural', 'Prises'],
+  [/\b(interrupteur|inter|poussoir|va et vient|v v|variateur|permutateur)\b/, 'Appareillage mural', 'Interrupteurs & poussoirs'],
+  [/\b(plexo|etanche)\b/, 'Appareillage mural', 'Appareillage étanche'],
+  [/\b(ho7v|h07v|fil)\b/, 'Câbles & fils', 'Fils H07V'],
+  [/\b(alu|torsade|almelec)\b.*\bcable|\bcable\b.*\b(alu|torsade)\b/, 'Câbles & fils', 'Câbles alu & torsadés'],
+  [/\b(souple|souble|ho5|h05|hovv|scindex)\b/, 'Câbles & fils', 'Câbles souples'],
+  [/\b(u1000|u100|r2v|ro2v|rvfv)\b|\bcable\b.*\d ?\* ?\d/, 'Câbles & fils', 'Câbles U1000 R2V / RO2V'],
+  [/\b(cable|cables)\b/, 'Câbles & fils', ''],
+  [/\b(ventilateur|extracteur|aerateur)\b/, 'Chauffage & ventilation', 'Ventilateurs & extracteurs'],
+  [/\b(chauffe eau|radiateur|convecteur|resistance)\b/, 'Chauffage & ventilation', 'Chauffe-eau & radiateurs'],
+  [/\b(testeur|multimetre|pince amperemetrique|detecteur de tension|megohmmetre)\b/, 'Outillage & consommables', 'Testeurs & mesure'],
+  [/\b(tournevis|pince|marteau|perceuse|foret|meche|scie|cutter|pistolet|lime|denudeur|sertisseuse|caisse a outils)\b/, 'Outillage & consommables', 'Outils'],
+  [/\b(rlx|rouleau|ruban isolant|isolant|chatterton|scotch|adhesif|crepe)\b/, 'Outillage & consommables', 'Rubans isolants & adhésifs'],
+  [/\b(colle|glue|cheville|vis|clou|rilsan|serre cable|attache|silicone|mousse|bouchon|etiquette)\b/, 'Outillage & consommables', 'Consommables']
+];
+const MARQ = [['schneider'], ['legrand'], ['hager'], ['abb', 'ABB'], ['siemens'], ['chint'], ['eaton'], ['siame'], ['tti', 'TTI'], ['stiel'], ['somef'], ['ovivo'], ['ema', 'EMA'], ['amel'], ['quiterios'], ['maaplast'], ['mondial'], ['super cable', 'Super Câble'], ['radiance'], ['fermax'], ['hikvision'], ['hilook', 'HiLook'], ['dahua'], ['dhahua', 'Dahua'], ['ezviz', 'EZVIZ'], ['imou', 'IMOU'], ['unv', 'UNV'], ['zkteco', 'ZKTeco'], ['satel'], ['ksenia'], ['ajax'], ['perfecta', 'Satel'], ['paradox'], ['gomax'], ['ingco', 'INGCO'], ['teknix'], ['teknoline'], ['blizzard'], ['philips'], ['osram'], ['ledvance'], ['bticino', 'BTicino'], ['ingelec'], ['bft', 'BFT'], ['faac', 'FAAC'], ['nice'], ['came'], ['tp link', 'TP-Link'], ['tplink', 'TP-Link'], ['ubiquiti'], ['mikrotik', 'MikroTik'], ['athlet']];
+const famNorm = s => ' ' + normS(s).replace(/[^a-z0-9+*.,]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+function famGuess(nom) {
+  const s = famNorm(nom), N = famNoms();
+  for (const [re, f, sf] of FAMKW) if (re.test(s) && N.includes(f)) return {cat: f, sfam: sf && famSous(f).includes(sf) ? sf : ''};
+  return null;
+}
+function marqueGuess(nom) { const s = famNorm(nom); for (const [k, l] of MARQ) if (s.includes(' ' + k + ' ')) return l || k.replace(/\b\w/g, c => c.toUpperCase()); return ''; }
+/* Proposition complète pour un article (ne touche pas à ce qui est déjà bien rempli) */
+function famAuto(a) {
+  const o = {}, g = famOk(a) ? null : famGuess(a.nom);
+  if (!famOk(a)) { if (a.cat && a.cat !== FAM_X && !a.catOC) o.catOC = a.cat; o.cat = g ? g.cat : FAM_X; o.sfam = g ? g.sfam : ''; }
+  else if (a.sfam && !famSous(a.cat).includes(a.sfam)) o.sfam = '';
+  else if (!a.sfam) { const g2 = famGuess(a.nom); if (g2 && g2.cat === a.cat && g2.sfam) o.sfam = g2.sfam; }
+  if (!a.marque) { const m = marqueGuess(a.nom); if (m) o.marque = m; }
+  Object.keys(o).forEach(k => { if (o[k] === (a[k] || '')) delete o[k]; });
+  return o;
+}
+/* Formulaire article : famille → sous-famille, proposition d'après la désignation */
+const famOpts = () => [['', '— Choisir la famille —'], ...famNoms().map(n => [n, n])];
+function famFill(f, cat, sfam) {
+  const s = f.elements.sfam; if (!s) return; const L = famSous(cat), extra = sfam && !L.includes(sfam) ? [sfam] : [];
+  s.innerHTML = [['', L.length ? '— Aucune —' : '— Pas de sous-famille —'], ...[...L, ...extra].map(x => [x, x + (extra.includes(x) ? ' (à revoir)' : '')])].map(([v, l]) => `<option value="${esc(v)}"${v === (sfam || '') ? ' selected' : ''}>${esc(l)}</option>`).join('');
+}
+function famFormInit(item) {
+  const f = $('#mf'); if (!f || !f.elements.cat) return;
+  const c = f.elements.cat, cat = item && item.cat;
+  if (cat && !famNoms().includes(cat)) { c.insertAdjacentHTML('beforeend', `<option value="" selected>${esc(cat)} (ancienne catégorie, à reclasser)</option>`); c.value = ''; }
+  famFill(f, c.value, item && item.sfam);
+  f.dataset.famManual = item && famOk(item) ? '1' : '';
+  const mq = f.elements.marque; if (mq && !$('#dl-marques')) { const M = [...new Set([...D.articles.map(a => a.marque).filter(Boolean), ...MARQ.map(([k, l]) => l || k.replace(/\b\w/g, x => x.toUpperCase()))])].sort(); mq.setAttribute('list', 'dl-marques'); mq.insertAdjacentHTML('afterend', `<datalist id="dl-marques">${M.map(m => `<option value="${esc(m)}">`).join('')}</datalist>`); }
+  c.insertAdjacentHTML('afterend', '<div id="fam-hint" class="text-xs text-mute" style="margin-top:.2rem"></div>');
+  if (!item || !famOk(item)) famSuggest(f);
+}
+function famSuggest(f) {
+  if (f.dataset.famManual) return; const nom = f.elements.nom ? f.elements.nom.value : '', g = famGuess(nom), h = $('#fam-hint');
+  if (g) { f.elements.cat.value = g.cat; famFill(f, g.cat, g.sfam); if (h) h.textContent = 'Proposé d\'après la désignation : vérifiez.'; } else if (h) h.textContent = nom.trim() ? 'Aucune famille reconnue : choisissez-la.' : '';
+  const mq = f.elements.marque; if (mq && !mq.value.trim() && !mq.dataset.touched) { const m = marqueGuess(nom); if (m) mq.value = m; }
+}
+document.addEventListener('input', e => { const f = e.target.closest && e.target.closest('#mf[data-form="article"]'); if (!f) return; if (e.target.name === 'nom') famSuggest(f); if (e.target.name === 'marque') e.target.dataset.touched = '1'; });
+document.addEventListener('change', e => { const f = e.target.closest && e.target.closest('#mf[data-form="article"]'); if (!f) return; if (e.target.name === 'cat') { f.dataset.famManual = '1'; famFill(f, e.target.value, ''); const h = $('#fam-hint'); if (h) h.textContent = ''; } if (e.target.name === 'sfam') f.dataset.famManual = '1'; });
+
+/* Écran « Familles d'articles » */
+let FAMRUN = null;
+async function famBulk(L, label) {
+  if (!L.length) return toast('Rien à modifier.');
+  FAMRUN = {done: 0, total: L.length, label}; render(); let i = 0, err = 0;
+  const w = async () => { while (i < L.length) { const [id, p] = L[i++]; try { await ctx.db.doc('articles/' + id).update(p); } catch (e) { err++; } FAMRUN.done++; if (FAMRUN.done % 40 === 0) render(); } };
+  await Promise.all([w(), w(), w(), w()]); FAMRUN = null; render();
+  toast(L.length - err + ' article(s) mis à jour' + (err ? ', ' + err + ' en erreur' : ''), !!err);
+}
+const famSave = T => ctx.db.doc('settings/company').update({familles: T});
+function famStats() {
+  const by = {}; let x = 0, ns = 0, nm = 0;
+  D.articles.forEach(a => { if (!famOk(a)) { x++; return; } const k = a.cat; by[k] = by[k] || {n: 0, s: {}}; by[k].n++; if (a.sfam) by[k].s[a.sfam] = (by[k].s[a.sfam] || 0) + 1; else if (famSous(k).length) ns++; if (!a.marque) nm++; });
+  return {by, x, ns, nm};
+}
+function famRows(vue, q, fam) {
+  return D.articles.filter(a => (vue === 'tous' || (vue === 'aclasser' ? !famOk(a) : vue === 'sanssous' ? famOk(a) && !a.sfam && famSous(a.cat).length : vue === 'sansmarque' ? !a.marque : true)) && (!fam || a.cat === fam) && (!q || q.split(' ').filter(Boolean).every(w => normS(artS(a) + ' ' + (a.catOC || '')).includes(w))))
+    .sort((a, b) => a.nom.localeCompare(b.nom));
+}
+function vFamilles() {
+  const T = famTree(), S = famStats(), vue = FILT.fmv || 'aclasser', q = normS(FILT.fmq || ''), fam = FILT.fmf || '', adm = ctx.admin;
+  const kpi = (l, v, c = '') => `<div class="card p-3"><div class="text-xs text-mute">${l}</div><div class="text-xl font-bold ${c}">${v}</div></div>`;
+  const tree = T.map((f, i) => { const st = S.by[f.nom] || {n: 0, s: {}}; return `<tr class="fi"><td class="font-semibold">${esc(f.nom)}<div class="text-xs text-mute">${st.n} article(s)</div></td><td class="text-sm">${f.sous.map(s => `<span class="bd b-mute" style="margin:.1rem;display:inline-block">${esc(s)} · ${st.s[s] || 0}</span>`).join(' ') || '<span class="text-mute">—</span>'}</td><td><div class="acts">${adm ? smb('famedit', 'Modifier', 'btn-o', 'data-id="' + i + '"') + smb('famsren', 'Renommer une sous-famille', 'btn-o', 'data-id="' + i + '"') + smb('fammerge', 'Fusionner', 'btn-o', 'data-id="' + i + '"') + `<button type="button" class="ib" data-a="famdel" data-id="${i}" aria-label="Supprimer">${ic('trash')}</button>` : ''}</div></td></tr>`; }).join('');
+  const L = famRows(vue, q, fam), P = L.slice(0, 300), canAll = L.filter(a => { const o = famAuto(a); return (o.cat && o.cat !== FAM_X) || o.sfam || o.marque; });
+  const rows = P.map(a => { const o = famAuto(a), m = {...a, ...o}, prop = Object.keys(o).some(k => k !== 'catOC') && m.cat !== FAM_X ? esc(famLbl(m)) + (o.marque ? ' · ' + esc(o.marque) : '') : '';
+    return `<tr class="fi"><td><input type="checkbox" class="fam-ck" value="${a.id}" aria-label="Choisir ${esc(a.nom)}"></td><td><span class="font-semibold">${esc(a.nom)}</span><div class="text-xs text-mute">${esc(a.ref || '')}</div></td><td class="text-sm">${famOk(a) ? esc(famLbl(a)) : bd(FAM_X, 'b-warn')}${a.catOC || (!famOk(a) && a.cat && a.cat !== FAM_X) ? `<div class="text-xs text-mute">Ancienne : ${esc(a.catOC || a.cat)}</div>` : ''}</td><td class="text-sm">${esc(a.marque || '')}</td><td class="text-sm">${prop || '<span class="text-mute">—</span>'}</td></tr>`; }).join('') || emptyRow(5, vue === 'aclasser' ? 'Tous les articles sont classés.' : 'Aucun article.');
+  const fsel = `<select class="in" style="width:auto" data-a="filt" data-f="fmf"><option value="">Toutes les familles</option>${T.map(f => `<option${f.nom === fam ? ' selected' : ''}>${esc(f.nom)}</option>`).join('')}</select>`;
+  const vsel = `<select class="in" style="width:auto" data-a="filt" data-f="fmv">${[['aclasser', 'À classer (' + S.x + ')'], ['sanssous', 'Sans sous-famille (' + S.ns + ')'], ['sansmarque', 'Sans marque'], ['tous', 'Tous les articles']].map(([v, l]) => `<option value="${v}"${v === vue ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+  const bulk = adm ? `<section class="card p-3" style="margin-top:.75rem"><div class="flex flex-wrap gap-2 items-end"><div><label class="lb" for="fam-bc">Mettre les articles cochés dans</label><select id="fam-bc" class="in" style="width:auto">${T.map(f => `<option>${esc(f.nom)}</option>`).join('')}</select></div><div><label class="lb" for="fam-bs">Sous-famille</label><select id="fam-bs" class="in" style="width:auto"></select></div><div><label class="lb" for="fam-bm">Marque (facultatif)</label><input id="fam-bm" class="in" style="width:10rem" list="dl-marques2" autocomplete="off"><datalist id="dl-marques2">${[...new Set(D.articles.map(a => a.marque).filter(Boolean))].sort().map(m => `<option value="${esc(m)}">`).join('')}</datalist></div>${smb('famapply', 'Appliquer aux cochés', 'btn-p')}${smb('famauto', 'Appliquer les propositions (' + canAll.length + ')', 'btn-o', '', 'sync')}</div><p class="hint" style="margin:.4rem 0 0">« Appliquer les propositions » classe d'après la désignation tous les articles de la liste ci-dessous qui ont une proposition. L'ancienne catégorie est gardée dans la fiche.</p></section>` : '';
+  return head('Familles d\'articles', 'Familles et sous-familles imposées (listes de choix), marque à part. Elles servent au stock, aux inventaires, à l\'analyse des ventes et à la fidélité installateurs.', adm ? btn('famnew', 'Nouvelle famille') + btn('famreset', 'Ajouter les familles CASA-ELECT manquantes', 'btn-o', '', 'sync') : '') +
+    (FAMRUN ? `<div class="banner" style="margin-top:1rem">${esc(FAMRUN.label)} : <b>${FAMRUN.done}</b> / ${FAMRUN.total}… Gardez cette page ouverte.</div>` : '') +
+    `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3" style="margin-top:1rem">${kpi('Articles', D.articles.length)}${kpi('À classer', S.x, '')}${kpi('Sans sous-famille', S.ns)}${kpi('Sans marque', S.nm)}</div>` +
+    `<h2 class="sec" style="margin-top:1rem">Familles et sous-familles</h2>` + tbl('<th>Famille</th><th>Sous-familles (nombre d\'articles)</th><th></th>', tree, 760) +
+    `<h2 class="sec" style="margin-top:1rem">Classer les articles</h2><div class="flex flex-wrap gap-2">${vsel}${fsel}<input class="in" style="width:14rem" placeholder="Rechercher…" data-a="filt" data-f="fmq" value="${esc(FILT.fmq || '')}"></div>` + bulk +
+    tbl('<th><input type="checkbox" id="fam-all" aria-label="Tout cocher"></th><th>Article</th><th>Famille actuelle</th><th>Marque</th><th>Proposition</th>', rows, 760) + (L.length > 300 ? `<p class="hint">${L.length} articles : les 300 premiers sont affichés. Utilisez la recherche ou le filtre famille ; « Appliquer les propositions » traite toute la liste.</p>` : '');
+}
+function famBsFill() { const c = $('#fam-bc'), s = $('#fam-bs'); if (c && s) s.innerHTML = '<option value="">— Aucune —</option>' + famSous(c.value).map(x => `<option>${esc(x)}</option>`).join(''); }
+new MutationObserver(() => { const s = $('#fam-bs'); if (s && !s.options.length) famBsFill(); }).observe(document.body, {childList: true, subtree: true});
+document.addEventListener('change', e => { if (e.target.id === 'fam-bc') famBsFill(); if (e.target.id === 'fam-all') document.querySelectorAll('.fam-ck').forEach(c => { c.checked = e.target.checked; }); });
+PF.famille = {n: 'Nouvelle famille', e: 'Modifier la famille', f: [{k: 'nom', l: 'Nom de la famille', req: 1, w: 1}, {k: 'sous', l: 'Sous-familles (une par ligne)', t: 'area', w: 1}],
+  save: async (v, id) => {
+    const T = famTree().map(f => ({nom: f.nom, sous: [...f.sous]})), nom = v.nom.trim(), sous = [...new Set(String(v.sous || '').split(/\n|;/).map(s => s.trim()).filter(Boolean))];
+    if (!nom || nom === FAM_X) { toast('Nom de famille invalide.', true); return false; }
+    const i = id === '' || id == null ? -1 : +id, old = i >= 0 ? T[i] : null;
+    if (T.some((f, j) => j !== i && normS(f.nom) === normS(nom))) { toast('Cette famille existe déjà.', true); return false; }
+    if (old) T[i] = {nom, sous}; else T.push({nom, sous});
+    await famSave(T);
+    if (old) { const L = D.articles.filter(a => a.cat === old.nom && (old.nom !== nom || (a.sfam && !sous.includes(a.sfam)))).map(a => [a.id, {cat: nom, ...(a.sfam && !sous.includes(a.sfam) ? {sfam: ''} : {})}]); if (L.length) famBulk(L, 'Mise à jour des articles de la famille'); }
+    toast('Famille enregistrée');
+  }};
+PF.famsren = {n: 'Renommer une sous-famille', f: [{k: 'old', l: 'Sous-famille', t: 'select', o: () => famSous((famTree()[FAMCUR] || {}).nom).map(s => [s, s])}, {k: 'nv', l: 'Nouveau nom', req: 1}],
+  save: async v => { const T = famTree().map(f => ({nom: f.nom, sous: [...f.sous]})), f = T[FAMCUR], nv = v.nv.trim(); if (!f || !v.old || !nv) return false; if (f.sous.includes(nv) && nv !== v.old) { toast('Ce nom existe déjà dans la famille.', true); return false; } f.sous = f.sous.map(s => s === v.old ? nv : s); await famSave(T); famBulk(D.articles.filter(a => a.cat === f.nom && a.sfam === v.old).map(a => [a.id, {sfam: nv}]), 'Renommage de la sous-famille'); toast('Sous-famille renommée'); }};
+PF.fammerge = {n: 'Fusionner la famille', ok: 'Fusionner', f: [{k: 'dest', l: 'Déplacer tous ses articles vers', t: 'select', o: () => famNoms().filter((n, j) => j !== FAMCUR).map(n => [n, n])}],
+  save: async v => { const T = famTree().map(f => ({nom: f.nom, sous: [...f.sous]})), src = T[FAMCUR], dst = T.find(f => f.nom === v.dest); if (!src || !dst) return false;
+    src.sous.forEach(s => { if (!dst.sous.includes(s)) dst.sous.push(s); }); await famSave(T.filter(f => f !== src));
+    famBulk(D.articles.filter(a => a.cat === src.nom).map(a => [a.id, {cat: dst.nom}]), 'Fusion de « ' + src.nom + ' » dans « ' + dst.nom + ' »'); toast('Familles fusionnées : les sous-familles ont été reprises'); }};
+let FAMCUR = -1;
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a, id = b.dataset.id;
+  if (!/^fam/.test(a)) return;
+  if (!ctx.admin) return toast('Réservé à l\'administrateur.', true);
+  if (a === 'famnew') openPF('famille', null, null);
+  else if (a === 'famedit') { const f = famTree()[+id]; if (f) openPF('famille', {id, nom: f.nom, sous: f.sous.join('\n')}, null); }
+  else if (a === 'famsren') { FAMCUR = +id; if (!famSous((famTree()[FAMCUR] || {}).nom).length) return toast('Cette famille n\'a pas de sous-famille.', true); openPF('famsren', null, null); }
+  else if (a === 'fammerge') { FAMCUR = +id; openPF('fammerge', null, null); }
+  else if (a === 'famdel') { const T = famTree(), f = T[+id]; if (!f) return; const n = D.articles.filter(x => x.cat === f.nom).length; if (n) return toast(n + ' article(s) dans cette famille : utilisez « Fusionner » pour les déplacer.', true); if (!arm(b, 'Supprimer ?')) return; if (needOn()) wr(async () => { await famSave(T.filter((x, j) => j !== +id)); toast('Famille supprimée'); }); }
+  else if (a === 'famreset') { if (!arm(b, 'Confirmer ?')) return; const T = famTree().map(f => ({nom: f.nom, sous: [...f.sous]})); let n = 0; FAMDEF.forEach(([nom, sous]) => { let f = T.find(x => x.nom === nom); if (!f) { T.push(f = {nom, sous: []}); n++; } sous.forEach(s => { if (!f.sous.includes(s)) { f.sous.push(s); n++; } }); }); if (needOn()) wr(async () => { await famSave(T); toast(n ? n + ' famille(s) / sous-famille(s) ajoutée(s)' : 'Rien ne manque'); }); }
+  else if (a === 'famapply') { const ids = [...document.querySelectorAll('.fam-ck:checked')].map(c => c.value), c = ($('#fam-bc') || {}).value, s = ($('#fam-bs') || {}).value || '', m = (($('#fam-bm') || {}).value || '').trim(); if (!ids.length) return toast('Cochez au moins un article.', true); if (!needOn()) return;
+    famBulk(ids.map(i => { const x = byId(D.articles, i) || {}; return [i, {cat: c, sfam: s, ...(m ? {marque: m} : {}), ...(!famOk(x) && x.cat && x.cat !== FAM_X && !x.catOC ? {catOC: x.cat} : {})}]; }), 'Classement des articles cochés'); }
+  else if (a === 'famauto') { if (!arm(b, 'Confirmer ?')) return; if (!needOn()) return; const L = famRows(FILT.fmv || 'aclasser', normS(FILT.fmq || ''), FILT.fmf || '').map(x => [x.id, famAuto(x)]).filter(([, o]) => Object.keys(o).length); famBulk(L, 'Classement automatique'); }
+});
+
 /* ---------- Lot 4 : charges fixes avec catégories validées et rythme (remarque 19) ---------- */
 const CHF = [
   ['Local', [['Loyer du dépôt / magasin', 'Loyer', 10], ['Électricité STEG', 'Électricité / eau'], ['Eau SONEDE', 'Électricité / eau'], ['Gardiennage / nettoyage', 'Gardiennage / nettoyage']]],
@@ -4468,7 +4681,7 @@ const MODCOLS = {stats: ['factures', 'tickets', 'avoirs', 'paiements'], tplannin
   io: ['articles', 'clients', 'fournisseurs', 'dossiers'], prospects: ['prospects'], suivi: ['devis'], commandes: ['commandes', 'fournisseurs'], retours: ['problemes', 'besoins'], interv: ['interventions'], planning: ['interventions'], taches: ['taches'],
   effets: ['paiements'], recouv: ['paiements', 'factures'], fournisseurs: ['fournisseurs'], receptions: ['receptions', 'commandes', 'articles'], retfourn: ['retoursfourn', 'avoirsfourn'], reappro: ['commandes'],
   facfourn: ['facfourn', 'reglfourn', 'avoirsfourn'], echfourn: ['facfourn', 'reglfourn'], retenues: ['reglfourn', 'depenses'], depenses: ['depenses'], caisse: ['caisse', 'clotures'], banques: ['caisse'], sorties: ['sorties', 'articles'],
-  mouvements: [], analyse: [], rechart: [], etatstock: [], rentab: [], monrh: [], rh: ['rh', 'pointages', 'demandes', 'rhformations', 'rhrecrut'], services: ['services', 'modeles'], modeles: ['modeles', 'depenses'], contactsadm: ['contactsadm'], propositions: []};
+  mouvements: [], analyse: [], rechart: [], etatstock: [], rentab: [], monrh: [], rh: ['rh', 'pointages', 'demandes', 'rhformations', 'rhrecrut'], familles: ['articles'], services: ['services', 'modeles'], modeles: ['modeles', 'depenses'], contactsadm: ['contactsadm'], propositions: []};
 const CORE_READ = ['articles', 'clients', 'dossiers', 'services', 'regroupements', 'modeles', 'interventions', 'personnel', 'fournisseurs', 'installateurs', 'points'];
 const SENS = [['pa', 'Prix d\'achat et marges'], ['caisse', 'Caisse et banques'], ['salaires', 'Salaires et fiches RH']];
 const droitsCfg = () => (D.settings && D.settings.droits) || null;
@@ -4803,7 +5016,8 @@ const MODULES = [
   {id: 'rentab', label: 'Rentabilité des chantiers', icon: 'chart', roles: ['admin'], render: vRentab},
   {sep: 'Ressources humaines', id: 'monrh', label: 'Mon espace RH', icon: 'cal', roles: ['admin', 'commercial', 'technicien', 'comptoir', 'rh'], render: vMonRH},
   {id: 'rh', label: 'Gestion RH', icon: 'users', roles: ['admin'], render: vRH, badge: pendRH},
-  {sep: 'Administration', id: 'services', label: 'Services & tâches', icon: 'sheet', roles: ['admin', 'commercial', 'technicien'], render: vServices},
+  {sep: 'Administration', id: 'familles', label: 'Familles d\'articles', icon: 'box', roles: ['admin'], render: vFamilles, badge: () => D.articles.filter(a => !famOk(a)).length},
+  {id: 'services', label: 'Services & tâches', icon: 'sheet', roles: ['admin', 'commercial', 'technicien'], render: vServices},
   {id: 'modeles', label: 'Charges fixes & modèles', icon: 'sheet', roles: ['admin', 'commercial'], render: vModeles},
   {id: 'agenda', label: 'Mon agenda', icon: 'cal', roles: ['admin', 'commercial', 'technicien', 'comptoir', 'rh'], render: vAgenda, badge: () => agItems(ds(), ds()).length},
   {id: 'propositions', label: 'Mes propositions', icon: 'doc', roles: ['admin', 'commercial', 'technicien', 'comptoir', 'rh'], render: vPropositions, badge: () => ctx.admin ? (D.propositions || []).filter(p => p.statut === 'Nouvelle').length : 0},
